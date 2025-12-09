@@ -184,47 +184,85 @@ export class Player {
     handleMovement(dt) {
         // 1. Climbing Logic
         if (this.isClimbing && this.climbHand) {
+            this.velocity.set(0, 0, 0);
             const controller = this.controllers[this.climbHand].object;
             const currentHandPos = new THREE.Vector3();
             controller.getWorldPosition(currentHandPos);
             
-            // Calculate delta: How much did the hand move?
             const delta = currentHandPos.clone().sub(this.previousHandPos);
-            
-            // Move Player Group OPPOSITE to hand movement
             this.userGroup.position.sub(delta);
-            
-            // Update previous for next frame
-            // Note: We need to re-read world pos because we just moved the parent group
             controller.getWorldPosition(this.previousHandPos);
-            
-            return; // Skip walking/gravity logic
+            return; 
         }
 
-        // 2. Walking / Flying Logic
-        let speed = 5.0;
-        const leftStick = this.controllers.left.gamepad;
+        // 2. Gliding & Gesture Movement
+        let isGliding = false;
+        const headPos = new THREE.Vector3();
+        const headQuat = new THREE.Quaternion();
+        this.camera.getWorldPosition(headPos);
+        this.camera.getWorldQuaternion(headQuat);
         
+        const headDir = new THREE.Vector3(0, 0, -1).applyQuaternion(headQuat);
+        const headRight = new THREE.Vector3(1, 0, 0).applyQuaternion(headQuat);
+
+        // Check Gliding (Arms out T-Pose)
+        const lPos = new THREE.Vector3(); this.controller1.getWorldPosition(lPos);
+        const rPos = new THREE.Vector3(); this.controller2.getWorldPosition(rPos);
+        
+        const lRel = lPos.clone().sub(headPos);
+        const rRel = rPos.clone().sub(headPos);
+        
+        // T-Pose check: Arms extended laterally (Left < -0.3, Right > 0.3)
+        if (lRel.dot(headRight) < -0.3 && rRel.dot(headRight) > 0.3) {
+            isGliding = true;
+        }
+
+        // Input Calculation
+        const inputVec = new THREE.Vector3();
+        let speed = 6.0;
+
+        // A. Joystick
+        const leftStick = this.controllers.left.gamepad;
         if (leftStick && leftStick.axes.length >= 4) {
-            // Axes: 2=x, 3=y usually
             const dx = leftStick.axes[2];
             const dy = leftStick.axes[3];
-            
             if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
-                // Move relative to headset direction
-                const headDir = new THREE.Vector3();
-                this.camera.getWorldDirection(headDir);
-                headDir.y = 0;
-                headDir.normalize();
-                
-                const sideDir = new THREE.Vector3(-headDir.z, 0, headDir.x);
-                
-                const moveVec = headDir.multiplyScalar(-dy).add(sideDir.multiplyScalar(dx));
-                this.userGroup.position.addScaledVector(moveVec, speed * dt);
+                const flatHead = headDir.clone().setY(0).normalize();
+                const flatSide = new THREE.Vector3(-flatHead.z, 0, flatHead.x);
+                inputVec.add(flatHead.multiplyScalar(-dy));
+                inputVec.add(flatSide.multiplyScalar(dx));
             }
         }
 
-        // 3. Rotation (Snap turn on right stick)
+        // B. Gesture (Reaching forward)
+        // If hand is > 0.4m in front of head in look direction
+        const forwardThreshold = 0.4;
+        if (lRel.dot(headDir) > forwardThreshold || rRel.dot(headDir) > forwardThreshold) {
+            const flatHead = headDir.clone().setY(0).normalize();
+            inputVec.add(flatHead.multiplyScalar(1.0));
+        }
+
+        // Apply Input with Wall Collision
+        if (inputVec.length() > 0) {
+            inputVec.normalize().multiplyScalar(speed * dt);
+            
+            const curFeet = this.userGroup.position.clone();
+            // Raycast at waist height (0.5m)
+            const wallRay = new THREE.Raycaster(
+                curFeet.clone().add(new THREE.Vector3(0, 0.5, 0)), 
+                inputVec.clone().normalize(), 
+                0, 
+                1.0
+            );
+            const wallHits = wallRay.intersectObjects(this.world.colliders);
+            
+            // Stop if too close to wall (0.3m buffer)
+            if (wallHits.length === 0 || wallHits[0].distance > 0.3) {
+                 this.userGroup.position.add(inputVec);
+            }
+        }
+
+        // 3. Rotation (Right Stick)
         const rightStick = this.controllers.right.gamepad;
         if (rightStick && rightStick.axes.length >= 4) {
             const rx = rightStick.axes[2];
@@ -235,30 +273,50 @@ export class Player {
             }
         }
 
-        // 4. Gravity
-        // Simple floor check
+        // 4. Physics
         const feetPos = this.userGroup.position.clone();
         
-        // Raycast down to find ground
-        const raycaster = new THREE.Raycaster(feetPos.clone().add(new THREE.Vector3(0,1,0)), new THREE.Vector3(0,-1,0));
+        // Ground Check
+        const rayOrigin = feetPos.clone().add(new THREE.Vector3(0, 1.0, 0)); 
+        const raycaster = new THREE.Raycaster(rayOrigin, new THREE.Vector3(0, -1, 0));
         const intersects = raycaster.intersectObjects(this.world.colliders);
         
-        let onGround = false;
-        let groundY = -1000;
-
+        let groundY = -Infinity;
         if (intersects.length > 0) {
-            // Find highest point below us
-            groundY = intersects[0].point.y;
-            if (feetPos.y <= groundY + 0.1 && this.velocity.y <= 0) {
-                onGround = true;
-                this.userGroup.position.y = groundY;
-                this.velocity.y = 0;
+            // Find highest ground below origin
+            for(const hit of intersects) {
+                if (hit.point.y < rayOrigin.y) {
+                    groundY = hit.point.y;
+                    break;
+                }
             }
         }
 
-        if (!onGround) {
-            this.velocity.y += this.gravity * dt;
-            this.userGroup.position.addScaledVector(this.velocity, dt);
+        const distToGround = feetPos.y - groundY;
+        
+        // Landing / On Ground
+        if (distToGround <= 0.1 && this.velocity.y <= 0) {
+            this.userGroup.position.y = groundY;
+            this.velocity.y = 0;
+        } else {
+            // Airborne
+            if (isGliding && this.velocity.y < 0) {
+                // Gliding Physics
+                this.velocity.y = THREE.MathUtils.lerp(this.velocity.y, -2.0, dt * 2); // Terminal velocity for gliding
+                const forward = headDir.clone().setY(0).normalize();
+                this.userGroup.position.addScaledVector(forward, 12 * dt); // Fast glide speed
+            } else {
+                this.velocity.y += this.gravity * dt;
+            }
+            
+            // Apply Velocity (Continuous floor check)
+            const deltaY = this.velocity.y * dt;
+            if (feetPos.y + deltaY < groundY) {
+                this.userGroup.position.y = groundY;
+                this.velocity.y = 0;
+            } else {
+                this.userGroup.position.y += deltaY;
+            }
         }
     }
 
