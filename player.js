@@ -61,11 +61,9 @@ export class Player {
         };
 
         // Event Listeners
-        this.controller1.addEventListener('selectstart', () => this.onTriggerStart('left'));
         this.controller1.addEventListener('squeezestart', () => this.onGripStart('left'));
         this.controller1.addEventListener('squeezeend', () => this.onGripEnd('left'));
         
-        this.controller2.addEventListener('selectstart', () => this.onTriggerStart('right'));
         this.controller2.addEventListener('squeezestart', () => this.onGripStart('right'));
         this.controller2.addEventListener('squeezeend', () => this.onGripEnd('right'));
 
@@ -73,91 +71,65 @@ export class Player {
         this.peerMeshes = {};
     }
 
-    onTriggerStart(side) {
-        // Shooting logic
-        this.audio.play('shoot', 0.5);
-        
-        // Simple Raycast shoot
-        const controller = side === 'left' ? this.controller1 : this.controller2;
-        const tempMatrix = new THREE.Matrix4();
-        tempMatrix.identity().extractRotation(controller.matrixWorld);
 
-        const raycaster = new THREE.Raycaster();
-        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-
-        // Visual Bullet
-        const bullet = new THREE.Mesh(
-            new THREE.SphereGeometry(0.05), 
-            new THREE.MeshBasicMaterial({color: 0xffff00})
-        );
-        bullet.position.copy(raycaster.ray.origin);
-        this.scene.add(bullet);
-        
-        // Animate bullet (simple)
-        const dir = raycaster.ray.direction.clone();
-        const speed = 50;
-        const startTime = Date.now();
-        const animateBullet = () => {
-            const now = Date.now();
-            if(now - startTime > 2000) {
-                this.scene.remove(bullet);
-                return;
-            }
-            bullet.position.addScaledVector(dir, speed * 0.016);
-            requestAnimationFrame(animateBullet);
-        }
-        animateBullet();
-    }
 
     onGripStart(side) {
         const c = this.controllers[side];
         c.grip = true;
         
-        // Check for climbable objects
         const handPos = new THREE.Vector3();
         c.object.getWorldPosition(handPos);
 
-        // Simple distance check to all colliders (optimization: use octree or specific layer in real app)
-        let canClimb = false;
-        
-        // Helper to check intersect
-        const sphere = new THREE.Sphere(handPos, 0.15); // 15cm grip radius
-        
-        for (let obj of this.world.colliders) {
-            // Simplified: Checking bounding box of colliders
-            // In a real game, use precise collision
-            if(!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
-            const box = new THREE.Box3().copy(obj.geometry.boundingBox).applyMatrix4(obj.matrixWorld);
-            
-            if (box.intersectsSphere(sphere)) {
-                canClimb = true;
-                break;
-            }
-        }
-
-        if (canClimb) {
+        if (this.canClimbAt(handPos)) {
             this.isClimbing = true;
             this.climbHand = side;
-            this.velocity.set(0,0,0); // Stop falling
-            
-            // Store the relationship between the hand and the world space
-            // Actually, for climbing, we want to move the WORLD relative to the HAND.
-            // So we need to know where the hand IS in local space relative to the rig,
-            // and lock that world position.
+            this.velocity.set(0,0,0);
             this.previousHandPos = handPos.clone();
+            this.climbVelocity = new THREE.Vector3();
             this.audio.play('climb');
         }
     }
 
     onGripEnd(side) {
         this.controllers[side].grip = false;
+        
         if (this.climbHand === side) {
+            // Hand-over-hand logic: switch to other hand if gripping
+            const otherSide = side === 'left' ? 'right' : 'left';
+            if (this.controllers[otherSide].grip) {
+                 const handPos = new THREE.Vector3();
+                 this.controllers[otherSide].object.getWorldPosition(handPos);
+                 if (this.canClimbAt(handPos)) {
+                     this.climbHand = otherSide;
+                     this.previousHandPos = handPos.clone();
+                     this.climbVelocity = new THREE.Vector3();
+                     return;
+                 }
+            }
+
+            // Release
             this.isClimbing = false;
             this.climbHand = null;
-            // Add a little toss velocity?
-            this.velocity.y = 2; // slight jump
+            
+            // Fling mechanic: Throw player based on hand velocity
+            if (this.climbVelocity) {
+                // Invert delta because pulling hand down throws player up
+                this.velocity.copy(this.climbVelocity).multiplyScalar(-1.5);
+                this.velocity.clampLength(0, 15); // Cap speed
+            } else {
+                this.velocity.y = 2;
+            }
         }
+    }
+
+    canClimbAt(pos) {
+        const sphere = new THREE.Sphere(pos, 0.15);
+        for (let obj of this.world.colliders) {
+            if(!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
+            const box = new THREE.Box3().copy(obj.geometry.boundingBox).applyMatrix4(obj.matrixWorld);
+            if (box.intersectsSphere(sphere)) return true;
+        }
+        return false;
     }
 
     update(dt) {
@@ -184,13 +156,20 @@ export class Player {
     handleMovement(dt) {
         // 1. Climbing Logic
         if (this.isClimbing && this.climbHand) {
-            this.velocity.set(0, 0, 0);
             const controller = this.controllers[this.climbHand].object;
             const currentHandPos = new THREE.Vector3();
             controller.getWorldPosition(currentHandPos);
             
             const delta = currentHandPos.clone().sub(this.previousHandPos);
+            
+            // Calculate velocity for throw (smoothed)
+            const instVel = delta.clone().divideScalar(dt || 0.016);
+            if (!this.climbVelocity) this.climbVelocity = instVel;
+            this.climbVelocity.lerp(instVel, 0.5);
+
             this.userGroup.position.sub(delta);
+            
+            // Re-read world pos after moving player to ensure accurate lock
             controller.getWorldPosition(this.previousHandPos);
             return; 
         }
