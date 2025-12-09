@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PopOne VR Clone</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.8); color: white; z-index: 10;
+            pointer-events: none;
+        }
+        h1 { font-size: 3rem; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 5px; }
+        p { font-size: 1.2rem; max-width: 600px; text-align: center; color: #aaa; }
+        #start-btn {
+            pointer-events: auto;
+            margin-top: 20px; padding: 15px 40px; font-size: 1.5rem;
+            background: #ff9900; border: none; color: black; font-weight: bold;
+            cursor: pointer; border-radius: 5px;
+        }
+        #info {
+            position: absolute; bottom: 20px; left: 20px; color: rgba(255,255,255,0.5);
+            pointer-events: none; font-size: 0.8rem;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://esm.sh/three@0.160.0",
+                "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="overlay">
+        <h1>Sky Drop VR</h1>
+        <p>A VR Headset is required to play.</p>
+        <p>Grip buttons to CLIMB. Thumbsticks to MOVE/TURN. Trigger to SHOOT.</p>
+        <p>Lobby Phase: Wait on the roof.</p>
+        <button id="start-btn">ENTER VR</button>
+    </div>
+    <div id="info">Waiting for VR session...</div>
+    <script type="module" src="./main.js"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
+
