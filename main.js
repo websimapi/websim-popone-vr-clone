@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { World } from './world.js';
 import { Player } from './player.js';
 import { NetworkManager } from './network.js';
@@ -38,14 +37,39 @@ let player;
 // Setup
 const startBtn = document.getElementById('start-btn');
 startBtn.addEventListener('click', async () => {
+    startBtn.disabled = true;
+    startBtn.innerText = "INITIALIZING...";
+
     audio.resume();
     audio.play('wind', 0.2, true);
     
-    // Create VR Button logic manually to inject into our UI or use helper
-    document.body.appendChild(VRButton.createButton(renderer));
-    
-    // Hide overlay
-    document.getElementById('overlay').style.display = 'none';
+    if ('xr' in navigator) {
+        try {
+            const session = await navigator.xr.requestSession('immersive-vr', {
+                optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers']
+            });
+            renderer.xr.setSession(session);
+            
+            // Hide overlay
+            document.getElementById('overlay').style.display = 'none';
+
+            session.addEventListener('end', () => {
+                document.getElementById('overlay').style.display = 'flex';
+                startBtn.disabled = false;
+                startBtn.innerText = "ENTER VR";
+                if (player) {
+                    player.userGroup.position.set(0, 305, 0);
+                    player.velocity.set(0,0,0);
+                }
+            });
+        } catch (e) {
+            console.error(e);
+            startBtn.innerText = "VR ERROR (RETRY)";
+            startBtn.disabled = false;
+        }
+    } else {
+        startBtn.innerText = "WEBXR NOT SUPPORTED";
+    }
 });
 
 // Loading
