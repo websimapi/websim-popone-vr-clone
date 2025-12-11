@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PlayerRig } from './player-rig.js';
 import { PeerManager } from './peer-manager.js';
+import { Dashboard } from './dashboard.js';
 
 export class Player {
     constructor(scene, renderer, camera, world, network, audio) {
@@ -20,6 +21,9 @@ export class Player {
 
         // Initialize Peer Manager
         this.peerManager = new PeerManager(scene);
+
+        // Dashboard
+        this.dashboard = new Dashboard(scene, renderer, camera);
 
         // Physics State
         this.velocity = new THREE.Vector3();
@@ -42,6 +46,10 @@ export class Player {
 
         // Haptics cache
         this.lastHaptic = { left: 0, right: 0 };
+        
+        // Clap state
+        this.handsTogether = false;
+        this.lastClapTime = 0;
     }
 
     // Physics helper: Get ejection vector for a point vs box colliders
@@ -170,11 +178,42 @@ export class Player {
         this.rig.update();
         
         this.handleMovement(dt);
+        this.handleClap();
         this.handleHandCollision(dt);
         this.syncNetwork();
         
+        this.dashboard.update(this.controllers);
+        
         // // removed updatePeers() - delegated to PeerManager
         this.peerManager.update(this.network.peers, this.network.myId);
+    }
+
+    handleClap() {
+        const lPos = new THREE.Vector3(); 
+        this.controller1.getWorldPosition(lPos);
+        const rPos = new THREE.Vector3(); 
+        this.controller2.getWorldPosition(rPos);
+        
+        const dist = lPos.distanceTo(rPos);
+        
+        // Clap detection logic
+        if (dist < 0.15) {
+            if (!this.handsTogether) {
+                this.handsTogether = true;
+                const now = Date.now();
+                // Check double clap
+                if (now - this.lastClapTime < 800) {
+                    this.dashboard.toggle();
+                    this.lastClapTime = 0; // Reset so triple clap doesn't toggle again immediately
+                    this.triggerHaptic('left', 0.5, 50);
+                    this.triggerHaptic('right', 0.5, 50);
+                } else {
+                    this.lastClapTime = now;
+                }
+            }
+        } else if (dist > 0.25) {
+            this.handsTogether = false;
+        }
     }
 
     // // removed updateControllers() - moved to PlayerRig
