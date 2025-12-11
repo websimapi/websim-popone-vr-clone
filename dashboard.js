@@ -80,22 +80,40 @@ export class Dashboard {
         ctx.fillText(text, 64, 32);
     }
 
+    recenter() {
+        // Teleport in front of player
+        const headPos = new THREE.Vector3();
+        const headRot = new THREE.Quaternion();
+        this.camera.getWorldPosition(headPos);
+        this.camera.getWorldQuaternion(headRot);
+
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(headRot);
+        // Place 0.6m in front, slightly down
+        const target = headPos.add(forward.multiplyScalar(0.6));
+        target.y -= 0.1;
+
+        this.group.position.copy(target);
+        this.group.lookAt(this.camera.position);
+    }
+
+    show(scale = 1.0) {
+        this.group.visible = true;
+        this.group.scale.setScalar(scale);
+    }
+
+    hide() {
+        this.group.visible = false;
+    }
+
+    get isOpen() {
+        return this.group.visible;
+    }
+
     toggle() {
-        this.group.visible = !this.group.visible;
-        if (this.group.visible) {
-            // Teleport in front of player
-            const headPos = new THREE.Vector3();
-            const headRot = new THREE.Quaternion();
-            this.camera.getWorldPosition(headPos);
-            this.camera.getWorldQuaternion(headRot);
-
-            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(headRot);
-            // Place 0.6m in front, slightly down
-            const target = headPos.add(forward.multiplyScalar(0.6));
-            target.y -= 0.1;
-
-            this.group.position.copy(target);
-            this.group.lookAt(this.camera.position);
+        if (this.isOpen) this.hide();
+        else {
+            this.recenter();
+            this.show();
         }
     }
 

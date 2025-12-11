@@ -47,9 +47,8 @@ export class Player {
         // Haptics cache
         this.lastHaptic = { left: 0, right: 0 };
         
-        // Clap state
-        this.handsTogether = false;
-        this.lastClapTime = 0;
+        // Gesture state
+        this.gestureState = 'IDLE'; // IDLE, TOUCHING, EXPANDING, OPEN
     }
 
     // Physics helper: Get ejection vector for a point vs box colliders
@@ -178,7 +177,7 @@ export class Player {
         this.rig.update();
         
         this.handleMovement(dt);
-        this.handleClap();
+        this.handleDashboardGesture();
         this.handleHandCollision(dt);
         this.syncNetwork();
         
@@ -188,31 +187,60 @@ export class Player {
         this.peerManager.update(this.network.peers, this.network.myId);
     }
 
-    handleClap() {
-        const lPos = new THREE.Vector3(); 
-        this.controller1.getWorldPosition(lPos);
-        const rPos = new THREE.Vector3(); 
-        this.controller2.getWorldPosition(rPos);
-        
+    handleDashboardGesture() {
+        const lPos = new THREE.Vector3(); this.controller1.getWorldPosition(lPos);
+        const rPos = new THREE.Vector3(); this.controller2.getWorldPosition(rPos);
         const dist = lPos.distanceTo(rPos);
         
-        // Clap detection logic
-        if (dist < 0.15) {
-            if (!this.handsTogether) {
-                this.handsTogether = true;
-                const now = Date.now();
-                // Check double clap
-                if (now - this.lastClapTime < 800) {
-                    this.dashboard.toggle();
-                    this.lastClapTime = 0; // Reset so triple clap doesn't toggle again immediately
-                    this.triggerHaptic('left', 0.5, 50);
-                    this.triggerHaptic('right', 0.5, 50);
+        // Thresholds
+        const TOUCH_DIST = 0.10; // 10cm
+        const OPEN_DIST = 0.40;  // 40cm (Full open)
+        
+        if (this.gestureState === 'IDLE') {
+            if (dist < TOUCH_DIST) {
+                this.gestureState = 'TOUCHING';
+                this.dashboard.recenter(); // Prep position
+                this.triggerHaptic('left', 0.1, 10);
+                this.triggerHaptic('right', 0.1, 10);
+            }
+        }
+        else if (this.gestureState === 'TOUCHING') {
+            if (dist > TOUCH_DIST) {
+                if (this.dashboard.isOpen) {
+                    // Touched while open -> Close confirmed, returning to IDLE logic
+                    this.dashboard.hide();
+                    this.gestureState = 'IDLE';
                 } else {
-                    this.lastClapTime = now;
+                    // Touched while closed -> Start expanding
+                    this.gestureState = 'EXPANDING';
                 }
             }
-        } else if (dist > 0.25) {
-            this.handsTogether = false;
+        }
+        else if (this.gestureState === 'EXPANDING') {
+            // Map distance to scale
+            const progress = (dist - TOUCH_DIST) / (OPEN_DIST - TOUCH_DIST);
+            
+            if (progress >= 1.0) {
+                this.dashboard.show(1.0);
+                this.gestureState = 'OPEN';
+                this.triggerHaptic('left', 0.5, 20);
+                this.triggerHaptic('right', 0.5, 20);
+            } else if (progress <= 0) {
+                // Collapsed back to touch
+                this.dashboard.hide();
+                this.gestureState = 'TOUCHING';
+            } else {
+                this.dashboard.show(progress);
+            }
+        }
+        else if (this.gestureState === 'OPEN') {
+            if (dist < TOUCH_DIST) {
+                // Hands brought together -> Close
+                this.dashboard.hide();
+                this.gestureState = 'TOUCHING'; // Reset to touching state
+                this.triggerHaptic('left', 0.2, 20);
+                this.triggerHaptic('right', 0.2, 20);
+            }
         }
     }
 
