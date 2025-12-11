@@ -13,6 +13,7 @@ export class PlayerPhysics {
         this.climbHand = null; // 'left' or 'right'
         this.climbAnchor = new THREE.Vector3(); 
         this.climbVelocity = new THREE.Vector3();
+        this.previousHandPos = new THREE.Vector3();
 
         this.lastHaptic = { left: 0, right: 0 };
         this.turnSnapCooldown = false;
@@ -83,6 +84,7 @@ export class PlayerPhysics {
             
             // Anchor Logic: Lock this world point
             this.climbAnchor = handPos.clone();
+            this.previousHandPos = handPos.clone();
             
             this.climbVelocity = new THREE.Vector3();
             this.audio.play('climb');
@@ -104,6 +106,7 @@ export class PlayerPhysics {
                  if (this.canClimbAt(handPos, 0.5)) {
                      this.climbHand = otherSide;
                      this.climbAnchor = handPos.clone(); // New anchor
+                     this.previousHandPos = handPos.clone();
                      this.climbVelocity = new THREE.Vector3();
                      return;
                  }
@@ -202,5 +205,119 @@ export class PlayerPhysics {
                 inputVec.add(flatHead.multiplyScalar(-dy));
                 inputVec.add(flatSide.multiplyScalar(dx));
             }
+        }
+
+        // B. Gesture (Reaching forward)
+        // If hand is > 0.4m in front of head in look direction
+        const forwardThreshold = 0.4;
+        if (lRel.dot(headDir) > forwardThreshold || rRel.dot(headDir) > forwardThreshold) {
+            const flatHead = headDir.clone().setY(0).normalize();
+            inputVec.add(flatHead.multiplyScalar(1.0));
+        }
+
+        // Apply Input with Wall Collision
+        if (inputVec.length() > 0) {
+            inputVec.normalize().multiplyScalar(speed * dt);
+            
+            const curFeet = this.rig.userGroup.position.clone();
+            // Raycast at waist height (0.5m)
+            const wallRay = new THREE.Raycaster(
+                curFeet.clone().add(new THREE.Vector3(0, 0.5, 0)), 
+                inputVec.clone().normalize(), 
+                0, 
+                1.0
+            );
+            const wallHits = wallRay.intersectObjects(this.world.colliders);
+            
+            // Stop if too close to wall (0.3m buffer)
+            if (wallHits.length === 0 || wallHits[0].distance > 0.3) {
+                 this.rig.userGroup.position.add(inputVec);
+            }
+        }
+
+        // 3. Rotation (Right Stick)
+        const rightStick = this.rig.controllers.right.gamepad;
+        if (rightStick && rightStick.axes.length >= 4) {
+            const rx = rightStick.axes[2];
+            if (Math.abs(rx) > 0.5 && !this.turnSnapCooldown) {
+                this.rig.userGroup.rotation.y -= Math.sign(rx) * Math.PI / 4;
+                this.turnSnapCooldown = true;
+                setTimeout(() => this.turnSnapCooldown = false, 400);
+            }
+        }
+
+        // 4. Physics
+        const feetPos = this.rig.userGroup.position.clone();
         
+        // Ground Check
+        const rayOrigin = feetPos.clone().add(new THREE.Vector3(0, 1.0, 0)); 
+        const raycaster = new THREE.Raycaster(rayOrigin, new THREE.Vector3(0, -1, 0));
+        const intersects = raycaster.intersectObjects(this.world.colliders);
+        
+        let groundY = -Infinity;
+        if (intersects.length > 0) {
+            // Find highest ground below origin
+            for(const hit of intersects) {
+                if (hit.point.y < rayOrigin.y) {
+                    groundY = hit.point.y;
+                    break;
+                }
+            }
+        }
+
+        const distToGround = feetPos.y - groundY;
+        
+        // Landing / On Ground
+        if (distToGround <= 0.1 && this.velocity.y <= 0) {
+            this.rig.userGroup.position.y = groundY;
+            this.velocity.y = 0;
+        } else {
+            // Airborne
+            if (isGliding && this.velocity.y < 0) {
+                // Gliding Physics
+                this.velocity.y = THREE.MathUtils.lerp(this.velocity.y, -2.0, dt * 2); // Terminal velocity for gliding
+                const forward = headDir.clone().setY(0).normalize();
+                this.rig.userGroup.position.addScaledVector(forward, 12 * dt); // Fast glide speed
+            } else {
+                this.velocity.y += this.gravity * dt;
+            }
+            
+            // Apply Velocity (Continuous floor check)
+            const deltaY = this.velocity.y * dt;
+            if (feetPos.y + deltaY < groundY) {
+                this.rig.userGroup.position.y = groundY;
+                this.velocity.y = 0;
+            } else {
+                this.rig.userGroup.position.y += deltaY;
+            }
+        }
+    }
+
+    handleHandCollision(dt) {
+        if (this.isClimbing) return;
+
+        ['left', 'right'].forEach(side => {
+            const controller = this.rig.controllers[side].object;
+            const handPos = new THREE.Vector3();
+            controller.getWorldPosition(handPos);
+
+            const ejection = this.getHandCollision(handPos);
+            if (ejection) {
+                this.rig.userGroup.position.add(ejection);
+                
+                // Haptic feedback for touching wall
+                const now = Date.now();
+                if (now - this.lastHaptic[side] > 100) {
+                    this.triggerHaptic(side, 0.5, 5);
+                    this.lastHaptic[side] = now;
+                }
+                
+                // If we are pushing down (ejection is Up), kill downward velocity
+                if (ejection.y > 0 && this.velocity.y < 0) {
+                    this.velocity.y = 0;
+                }
+            }
+        });
+    }
+}
 
