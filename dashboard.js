@@ -27,9 +27,14 @@ export class Dashboard {
         window.addEventListener('remotion-canvas-created', (e) => {
             this.replayCanvas = e.detail;
             if (this.screenMat) {
+                if (this.screenMat.map) this.screenMat.map.dispose();
+                
                 this.screenMat.map = new THREE.CanvasTexture(this.replayCanvas);
                 this.screenMat.map.minFilter = THREE.LinearFilter;
                 this.screenMat.map.magFilter = THREE.LinearFilter;
+                this.screenMat.map.colorSpace = THREE.SRGBColorSpace;
+                this.screenMat.map.flipY = false;
+                
                 this.screenMat.color.setHex(0xffffff); // Reset color
                 this.screenMat.needsUpdate = true;
             }

@@ -6,20 +6,23 @@ import { World } from "./world.js";
 const ReplayComposition = ({ data }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const canvasRef = useRef(null);
+  const [canvas, setCanvas] = useState(null);
   const [handle] = useState(() => delayRender());
   const threeRef = useRef(null);
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!canvas) return;
+    if (threeRef.current) {
+      threeRef.current.renderer.dispose();
+      threeRef.current = null;
+    }
     window.dispatchEvent(new CustomEvent("remotion-canvas-created", {
-      detail: canvasRef.current
+      detail: canvas
     }));
-    if (threeRef.current) return;
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(5592405, 2e-3);
     const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.1, 1e3);
     const renderer = new THREE.WebGLRenderer({
-      canvas: canvasRef.current,
+      canvas,
       antialias: true,
       preserveDrawingBuffer: true
     });
@@ -52,7 +55,13 @@ const ReplayComposition = ({ data }) => {
     scene.add(lHand);
     scene.add(rHand);
     threeRef.current = { scene, camera, renderer, head, lHand, rHand, world };
-  }, [canvasRef]);
+    return () => {
+      if (threeRef.current) {
+        threeRef.current.renderer.dispose();
+        threeRef.current = null;
+      }
+    };
+  }, [canvas]);
   useEffect(() => {
     if (!threeRef.current) return;
     if (!data || !data.frames || data.frames.length === 0) return;
@@ -87,13 +96,13 @@ const ReplayComposition = ({ data }) => {
     }
     renderer.render(scene, camera);
   }, [frame, data, fps]);
-  return /* @__PURE__ */ jsxDEV(AbsoluteFill, { children: /* @__PURE__ */ jsxDEV("canvas", { ref: canvasRef, style: { width: "100%", height: "100%" } }, void 0, false, {
+  return /* @__PURE__ */ jsxDEV(AbsoluteFill, { children: /* @__PURE__ */ jsxDEV("canvas", { ref: setCanvas, style: { width: "100%", height: "100%" } }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 131,
+    lineNumber: 142,
     columnNumber: 13
   }) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 130,
+    lineNumber: 141,
     columnNumber: 9
   });
 };
