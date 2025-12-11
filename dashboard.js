@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 
 export class Dashboard {
-    constructor(scene, renderer, camera) {
+    constructor(scene, renderer, camera, audioManager) {
         this.scene = scene;
         this.renderer = renderer;
         this.camera = camera;
+        this.audioManager = audioManager;
 
         this.group = new THREE.Group();
         this.group.visible = false;
-        this.scene.add(this.group);
+        // scene.add handled by Player (parented to userGroup)
 
         this.buttons = [];
         this.isRecording = false;
@@ -165,6 +166,15 @@ export class Dashboard {
         try {
             // WebXR rendering writes to the base layer. captureStream() on the canvas *should* catch it.
             const stream = this.renderer.domElement.captureStream(30);
+            
+            // Add Audio Tracks
+            if (this.audioManager) {
+                const audioStream = this.audioManager.getStream();
+                if (audioStream) {
+                    audioStream.getAudioTracks().forEach(track => stream.addTrack(track));
+                }
+            }
+
             this.recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
             this.chunks = [];
 

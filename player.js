@@ -22,8 +22,10 @@ export class Player {
         // Initialize Peer Manager
         this.peerManager = new PeerManager(scene);
 
-        // Dashboard
-        this.dashboard = new Dashboard(scene, renderer, camera);
+        // Dashboard (Pass audio for recording)
+        this.dashboard = new Dashboard(scene, renderer, camera, audio);
+        // Parent dashboard to userGroup so it travels with the player automatically
+        this.userGroup.add(this.dashboard.group);
 
         // Physics State
         this.velocity = new THREE.Vector3();
@@ -188,8 +190,9 @@ export class Player {
     }
 
     handleDashboardGesture() {
-        const lPos = new THREE.Vector3(); this.controller1.getWorldPosition(lPos);
-        const rPos = new THREE.Vector3(); this.controller2.getWorldPosition(rPos);
+        // Use Local coordinates because Dashboard and Camera/Controllers are siblings in userGroup
+        const lPos = this.controller1.position.clone();
+        const rPos = this.controller2.position.clone();
         const dist = lPos.distanceTo(rPos);
         const midPoint = lPos.clone().add(rPos).multiplyScalar(0.5);
         
@@ -197,11 +200,9 @@ export class Player {
         const TOUCH_DIST = 0.10; // 10cm - closer required
         const OPEN_DIST = 0.40;  // 40cm
         
-        // Head Tracking for HUD
-        const headPos = new THREE.Vector3();
-        this.camera.getWorldPosition(headPos);
-        const headRot = new THREE.Quaternion();
-        this.camera.getWorldQuaternion(headRot);
+        // Head Tracking for HUD (Local Space)
+        const headPos = this.camera.position.clone();
+        const headRot = this.camera.quaternion.clone();
         const headDir = new THREE.Vector3(0, 0, -1).applyQuaternion(headRot);
 
         if (this.gestureState === 'IDLE') {
@@ -248,14 +249,20 @@ export class Player {
             }
         }
         else if (this.gestureState === 'OPEN') {
-            // HUD Mode: Follow head
+            // HUD Mode: Follow head (Local Space)
             // Target: 50cm in front of face, slightly down
             const targetPos = headPos.clone().add(headDir.clone().multiplyScalar(0.5));
             targetPos.y -= 0.15;
 
             // Lerp for smooth following (damped spring effect)
             const currentPos = this.dashboard.group.position.clone();
-            currentPos.lerp(targetPos, 0.1);
+            
+            // Snap if too far (prevents getting lost during teleport/snap turn/fast moves)
+            if (currentPos.distanceTo(targetPos) > 1.0) {
+                currentPos.copy(targetPos);
+            } else {
+                currentPos.lerp(targetPos, 0.15); // Slightly faster follow
+            }
 
             this.dashboard.updatePosition(currentPos, headPos);
 
