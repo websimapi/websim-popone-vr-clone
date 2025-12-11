@@ -12,17 +12,20 @@ export class Player {
         this.audio = audio;
 
         // Rig setup
-        this.userGroup = new THREE.Group(); 
-        this.userGroup.position.set(0, 305, 0); 
+        this.userGroup = new THREE.Group(); // Represents the player in world space (feet)
+        this.userGroup.position.set(0, 305, 0); // Spawn on roof
         this.scene.add(this.userGroup);
+        
+        // Camera must be added to a group to be moved by physics
         this.userGroup.add(this.camera);
 
-        // Controllers & Hands
+        // Controllers
         this.controller1 = this.renderer.xr.getController(0);
         this.controller2 = this.renderer.xr.getController(1);
         this.userGroup.add(this.controller1);
         this.userGroup.add(this.controller2);
 
+        // Models
         const controllerModelFactory = new XRControllerModelFactory();
         const handModelFactory = new XRHandModelFactory();
 
@@ -34,6 +37,7 @@ export class Player {
         this.controllerGrip2.add(controllerModelFactory.createControllerModel(this.controllerGrip2));
         this.userGroup.add(this.controllerGrip2);
 
+        // Hands
         this.hand1 = this.renderer.xr.getHand(0);
         this.hand1.add(handModelFactory.createHandModel(this.hand1));
         this.userGroup.add(this.hand1);
@@ -46,67 +50,146 @@ export class Player {
         this.velocity = new THREE.Vector3();
         this.gravity = -9.8;
         this.isClimbing = false;
-        this.climbHand = null; 
-        
-        // Hand Physics
-        this.handRadius = 0.05;
-        this.previousHandPos = { left: new THREE.Vector3(), right: new THREE.Vector3() };
+        this.climbHand = null; // 'left' or 'right'
+        this.climbAnchor = new THREE.Vector3(); // World pos where we grabbed
+        this.climbOffset = new THREE.Vector3(); // Offset from hand to anchor
 
         // Input State
         this.controllers = {
-            left: { gamepad: null, object: this.controller1, grip: false },
-            right: { gamepad: null, object: this.controller2, grip: false }
+            left: { gamepad: null, object: this.controller1, grip: false, trigger: false, hand: this.hand1 },
+            right: { gamepad: null, object: this.controller2, grip: false, trigger: false, hand: this.hand2 }
         };
 
-        // Listeners for state tracking
-        this.controller1.addEventListener('squeezestart', () => { this.controllers.left.grip = true; });
-        this.controller1.addEventListener('squeezeend', () => { this.controllers.left.grip = false; });
-        this.controller2.addEventListener('squeezestart', () => { this.controllers.right.grip = true; });
-        this.controller2.addEventListener('squeezeend', () => { this.controllers.right.grip = false; });
+        // Event Listeners
+        this.controller1.addEventListener('squeezestart', () => this.onGripStart('left'));
+        this.controller1.addEventListener('squeezeend', () => this.onGripEnd('left'));
+        
+        this.controller2.addEventListener('squeezestart', () => this.onGripStart('right'));
+        this.controller2.addEventListener('squeezeend', () => this.onGripEnd('right'));
 
+        // Peers visualization
         this.peerMeshes = {};
+        
+        // Haptics cache
+        this.lastHaptic = { left: 0, right: 0 };
     }
 
+    // Physics helper: Get ejection vector for a point vs box colliders
+    getHandCollision(handPos) {
+        let totalEjection = new THREE.Vector3();
+        let hitCount = 0;
 
+        for (let obj of this.world.colliders) {
+            // Transform point to local space of object for AABB check
+            // Simpler: Use Box3.setFromObject(obj) which gives World AABB.
+            const box = new THREE.Box3().setFromObject(obj);
+            
+            if (box.containsPoint(handPos)) {
+                // Find shallowest penetration
+                const min = box.min;
+                const max = box.max;
+                const p = handPos;
+
+                const dx1 = p.x - min.x;
+                const dx2 = max.x - p.x;
+                const dy1 = p.y - min.y;
+                const dy2 = max.y - p.y;
+                const dz1 = p.z - min.z;
+                const dz2 = max.z - p.z;
+
+                // Find min dimension
+                const minOverlap = Math.min(dx1, dx2, dy1, dy2, dz1, dz2);
+                
+                const ejection = new THREE.Vector3();
+                if (Math.abs(minOverlap - dx1) < 0.001) ejection.x = -dx1;
+                else if (Math.abs(minOverlap - dx2) < 0.001) ejection.x = dx2;
+                else if (Math.abs(minOverlap - dy1) < 0.001) ejection.y = -dy1;
+                else if (Math.abs(minOverlap - dy2) < 0.001) ejection.y = dy2;
+                else if (Math.abs(minOverlap - dz1) < 0.001) ejection.z = -dz1;
+                else if (Math.abs(minOverlap - dz2) < 0.001) ejection.z = dz2;
+
+                totalEjection.add(ejection);
+                hitCount++;
+            }
+        }
+        return hitCount > 0 ? totalEjection : null;
+    }
+
+    onGripStart(side) {
+        const c = this.controllers[side];
+        c.grip = true;
+        
+        const handPos = new THREE.Vector3();
+        c.object.getWorldPosition(handPos);
+
+        if (this.canClimbAt(handPos)) {
+            this.isClimbing = true;
+            this.climbHand = side;
+            this.velocity.set(0,0,0);
+            this.previousHandPos = handPos.clone();
+            this.climbVelocity = new THREE.Vector3();
+            this.audio.play('climb');
+            this.triggerHaptic(side, 1.0, 10);
+        }
+    }
+
+    onGripEnd(side) {
+        this.controllers[side].grip = false;
+        
+        if (this.climbHand === side) {
+            // Hand-over-hand logic: switch to other hand if gripping
+            const otherSide = side === 'left' ? 'right' : 'left';
+            if (this.controllers[otherSide].grip) {
+                 const handPos = new THREE.Vector3();
+                 this.controllers[otherSide].object.getWorldPosition(handPos);
+                 if (this.canClimbAt(handPos)) {
+                     this.climbHand = otherSide;
+                     this.previousHandPos = handPos.clone();
+                     this.climbVelocity = new THREE.Vector3();
+                     return;
+                 }
+            }
+
+            // Release
+            this.isClimbing = false;
+            this.climbHand = null;
+            
+            // Fling mechanic: Throw player based on hand velocity
+            if (this.climbVelocity) {
+                // Invert delta because pulling hand down throws player up
+                this.velocity.copy(this.climbVelocity).multiplyScalar(-1.5);
+                this.velocity.clampLength(0, 15); // Cap speed
+                
+                // Add upward boost if flinging up (vault assist)
+                if (this.velocity.y > 0) this.velocity.y += 2.0;
+            } else {
+                this.velocity.y = 2;
+            }
+        }
+    }
+
+    canClimbAt(pos) {
+        // Slightly larger radius for detection to feel forgiving
+        const sphere = new THREE.Sphere(pos, 0.25);
+        for (let obj of this.world.colliders) {
+            if(!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
+            const box = new THREE.Box3().setFromObject(obj);
+            if (box.intersectsSphere(sphere)) return true;
+        }
+        return false;
+    }
+    
+    triggerHaptic(side, strength, duration) {
+        const gamepad = this.controllers[side].gamepad;
+        if (gamepad && gamepad.hapticActuators && gamepad.hapticActuators[0]) {
+            gamepad.hapticActuators[0].pulse(strength, duration);
+        }
+    }
 
     update(dt) {
         this.updateControllers();
-        
-        // 1. Hands (Climbing & Vaulting)
-        // Returns displacement vector to apply to player
-        const handDisp = this.handleHandPhysics(dt);
-        
-        // 2. Turning (Right Stick)
-        this.handleTurning();
-
-        if (this.isClimbing) {
-            this.velocity.set(0,0,0);
-            // Apply hand movement directly
-            if (handDisp) this.userGroup.position.add(handDisp);
-            
-        } else {
-            // 3. Movement (Left Stick)
-            // Only if not climbing
-            const moveDisp = this.handleStickMovement(dt);
-            this.userGroup.position.add(moveDisp);
-            
-            // 4. Gravity & Ground
-            // If vaulting (handDisp has Y component > 0), kill gravity
-            if (handDisp && handDisp.y > 0) {
-                this.velocity.y = 0;
-            }
-            
-            if (handDisp) this.userGroup.position.add(handDisp);
-            
-            this.handleGravity(dt);
-        }
-
-        // Bounds reset
-        if (this.userGroup.position.y < -100) {
-             this.userGroup.position.set(0, 305, 0);
-             this.velocity.set(0,0,0);
-        }
-
+        this.handleMovement(dt);
+        this.handleHandCollision(dt);
         this.syncNetwork();
         this.updatePeers();
     }
@@ -125,110 +208,95 @@ export class Player {
         }
     }
 
-    handleHandPhysics(dt) {
-        const hands = [
-            { side: 'left', controller: this.controller1, grip: this.controllers.left.grip },
-            { side: 'right', controller: this.controller2, grip: this.controllers.right.grip }
-        ];
-
-        let totalDisp = new THREE.Vector3();
-        let currentlyClimbing = false;
-        
-        // Initialize prev pos if missing
-        if (!this.previousHandPos.left) this.controller1.getWorldPosition(this.previousHandPos.left);
-        if (!this.previousHandPos.right) this.controller2.getWorldPosition(this.previousHandPos.right);
-
-        for (const h of hands) {
-            const currentPos = new THREE.Vector3();
-            h.controller.getWorldPosition(currentPos);
+    handleMovement(dt) {
+        // 1. Climbing Logic
+        if (this.isClimbing && this.climbHand) {
+            const controller = this.controllers[this.climbHand].object;
+            const currentHandPos = new THREE.Vector3();
+            controller.getWorldPosition(currentHandPos);
             
-            if (h.grip) {
-                // --- CLIMBING ---
-                // Check if we can start climbing
-                if (this.climbHand !== h.side && this.checkCollision(currentPos, 0.1)) {
-                     this.climbHand = h.side;
-                     this.audio.play('climb');
-                }
+            const delta = currentHandPos.clone().sub(this.previousHandPos);
+            
+            // Calculate velocity for throw (smoothed)
+            const instVel = delta.clone().divideScalar(dt || 0.016);
+            if (!this.climbVelocity) this.climbVelocity = instVel;
+            this.climbVelocity.lerp(instVel, 0.5);
 
-                if (this.climbHand === h.side) {
-                    currentlyClimbing = true;
-                    // Move player to counteract hand movement
-                    // Delta since last frame (in world space)
-                    const delta = currentPos.clone().sub(this.previousHandPos[h.side]);
-                    totalDisp.sub(delta);
-                }
-            } else {
-                // --- VAULTING / COLLISION ---
-                if (this.climbHand === h.side) {
-                    this.climbHand = null; // Release
-                }
+            this.userGroup.position.sub(delta);
+            
+            // Re-read world pos after moving player to ensure accurate lock
+            controller.getWorldPosition(this.previousHandPos);
+            return; 
+        }
 
-                // Push against walls/floors
-                const push = this.getDepenetration(currentPos);
-                if (push.lengthSq() > 0) {
-                     totalDisp.add(push);
-                }
+        // 2. Gliding & Gesture Movement
+        let isGliding = false;
+        const headPos = new THREE.Vector3();
+        const headQuat = new THREE.Quaternion();
+        this.camera.getWorldPosition(headPos);
+        this.camera.getWorldQuaternion(headQuat);
+        
+        const headDir = new THREE.Vector3(0, 0, -1).applyQuaternion(headQuat);
+        const headRight = new THREE.Vector3(1, 0, 0).applyQuaternion(headQuat);
+
+        // Check Gliding (Arms out T-Pose)
+        const lPos = new THREE.Vector3(); this.controller1.getWorldPosition(lPos);
+        const rPos = new THREE.Vector3(); this.controller2.getWorldPosition(rPos);
+        
+        const lRel = lPos.clone().sub(headPos);
+        const rRel = rPos.clone().sub(headPos);
+        
+        // T-Pose check: Arms extended laterally (Left < -0.3, Right > 0.3)
+        if (lRel.dot(headRight) < -0.3 && rRel.dot(headRight) > 0.3) {
+            isGliding = true;
+        }
+
+        // Input Calculation
+        const inputVec = new THREE.Vector3();
+        let speed = 6.0;
+
+        // A. Joystick
+        const leftStick = this.controllers.left.gamepad;
+        if (leftStick && leftStick.axes.length >= 4) {
+            const dx = leftStick.axes[2];
+            const dy = leftStick.axes[3];
+            if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+                const flatHead = headDir.clone().setY(0).normalize();
+                const flatSide = new THREE.Vector3(-flatHead.z, 0, flatHead.x);
+                inputVec.add(flatHead.multiplyScalar(-dy));
+                inputVec.add(flatSide.multiplyScalar(dx));
             }
+        }
+
+        // B. Gesture (Reaching forward)
+        // If hand is > 0.4m in front of head in look direction
+        const forwardThreshold = 0.4;
+        if (lRel.dot(headDir) > forwardThreshold || rRel.dot(headDir) > forwardThreshold) {
+            const flatHead = headDir.clone().setY(0).normalize();
+            inputVec.add(flatHead.multiplyScalar(1.0));
+        }
+
+        // Apply Input with Wall Collision
+        if (inputVec.length() > 0) {
+            inputVec.normalize().multiplyScalar(speed * dt);
             
-            this.previousHandPos[h.side].copy(currentPos);
+            const curFeet = this.userGroup.position.clone();
+            // Raycast at waist height (0.5m)
+            const wallRay = new THREE.Raycaster(
+                curFeet.clone().add(new THREE.Vector3(0, 0.5, 0)), 
+                inputVec.clone().normalize(), 
+                0, 
+                1.0
+            );
+            const wallHits = wallRay.intersectObjects(this.world.colliders);
+            
+            // Stop if too close to wall (0.3m buffer)
+            if (wallHits.length === 0 || wallHits[0].distance > 0.3) {
+                 this.userGroup.position.add(inputVec);
+            }
         }
 
-        this.isClimbing = currentlyClimbing;
-        return totalDisp;
-    }
-
-    getDepenetration(pos) {
-        const radius = this.handRadius;
-        const push = new THREE.Vector3();
-        
-        for(const obj of this.world.colliders) {
-             const box = new THREE.Box3().setFromObject(obj); 
-             
-             // Check if inside or close
-             const closest = new THREE.Vector3().copy(pos).clamp(box.min, box.max);
-             const dist = pos.distanceTo(closest);
-             
-             if (dist < radius) {
-                 // Collision
-                 let pen = radius - dist;
-                 let dir = new THREE.Vector3();
-                 
-                 if (dist < 0.0001) {
-                     // Inside - find closest face to push out
-                     const dx1 = Math.abs(pos.x - box.min.x), dx2 = Math.abs(box.max.x - pos.x);
-                     const dy1 = Math.abs(pos.y - box.min.y), dy2 = Math.abs(box.max.y - pos.y);
-                     const dz1 = Math.abs(pos.z - box.min.z), dz2 = Math.abs(box.max.z - pos.z);
-                     const min = Math.min(dx1, dx2, dy1, dy2, dz1, dz2);
-                     
-                     if (min === dy2) dir.set(0, 1, 0); // Top
-                     else if (min === dy1) dir.set(0, -1, 0);
-                     else if (min === dx1) dir.set(-1, 0, 0);
-                     else if (min === dx2) dir.set(1, 0, 0);
-                     else if (min === dz1) dir.set(0, 0, -1);
-                     else if (min === dz2) dir.set(0, 0, 1);
-                     
-                     pen = 0.05; // Force push
-                 } else {
-                     dir.subVectors(pos, closest).normalize();
-                 }
-                 
-                 push.add(dir.multiplyScalar(pen));
-             }
-        }
-        return push;
-    }
-
-    checkCollision(pos, rad) {
-        // Simple overlap check
-        for(const obj of this.world.colliders) {
-             const box = new THREE.Box3().setFromObject(obj);
-             const closest = new THREE.Vector3().copy(pos).clamp(box.min, box.max);
-             if (pos.distanceTo(closest) < rad) return true;
-        }
-        return false;
-    }
-
-    handleTurning() {
+        // 3. Rotation (Right Stick)
         const rightStick = this.controllers.right.gamepad;
         if (rightStick && rightStick.axes.length >= 4) {
             const rx = rightStick.axes[2];
@@ -238,44 +306,8 @@ export class Player {
                 setTimeout(() => this.turnSnapCooldown = false, 400);
             }
         }
-    }
 
-    handleStickMovement(dt) {
-        const leftStick = this.controllers.left.gamepad;
-        const disp = new THREE.Vector3();
-        if (leftStick && leftStick.axes.length >= 4) {
-            const dx = leftStick.axes[2];
-            const dy = leftStick.axes[3];
-            if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
-                const headQuat = new THREE.Quaternion();
-                this.camera.getWorldQuaternion(headQuat);
-                const headDir = new THREE.Vector3(0, 0, -1).applyQuaternion(headQuat);
-                const flatHead = headDir.clone().setY(0).normalize();
-                const flatSide = new THREE.Vector3(-flatHead.z, 0, flatHead.x);
-                
-                const input = new THREE.Vector3()
-                    .add(flatHead.multiplyScalar(-dy))
-                    .add(flatSide.multiplyScalar(dx));
-                
-                disp.copy(input.multiplyScalar(6.0 * dt));
-            }
-        }
-        return disp;
-    }
-
-    handleGravity(dt) {
-        // T-Pose Glide Check
-        const headPos = new THREE.Vector3(); this.camera.getWorldPosition(headPos);
-        const lPos = new THREE.Vector3(); this.controller1.getWorldPosition(lPos);
-        const rPos = new THREE.Vector3(); this.controller2.getWorldPosition(rPos);
-        const headQuat = new THREE.Quaternion(); this.camera.getWorldQuaternion(headQuat);
-        const headRight = new THREE.Vector3(1, 0, 0).applyQuaternion(headQuat);
-        
-        // Arms out check
-        const lRel = lPos.clone().sub(headPos).applyQuaternion(headQuat.clone().invert());
-        const rRel = rPos.clone().sub(headPos).applyQuaternion(headQuat.clone().invert());
-        let isGliding = (lRel.x < -0.3 && rRel.x > 0.3);
-
+        // 4. Physics
         const feetPos = this.userGroup.position.clone();
         
         // Ground Check
@@ -285,34 +317,73 @@ export class Player {
         
         let groundY = -Infinity;
         if (intersects.length > 0) {
+            // Find highest ground below origin
             for(const hit of intersects) {
-                if (hit.point.y < rayOrigin.y + 0.1) { // Tolerance
+                if (hit.point.y < rayOrigin.y) {
                     groundY = hit.point.y;
                     break;
                 }
             }
         }
 
-        if (feetPos.y <= groundY + 0.05 && this.velocity.y <= 0) {
+        const distToGround = feetPos.y - groundY;
+        
+        // Landing / On Ground
+        if (distToGround <= 0.1 && this.velocity.y <= 0) {
             this.userGroup.position.y = groundY;
             this.velocity.y = 0;
         } else {
-             if (isGliding && this.velocity.y < 0) {
-                 this.velocity.y = THREE.MathUtils.lerp(this.velocity.y, -2.0, dt * 2);
-                 // Gliding forward propulsion
-                 const forward = new THREE.Vector3(0,0,-1).applyQuaternion(headQuat).setY(0).normalize();
-                 this.userGroup.position.add(forward.multiplyScalar(10 * dt));
-             } else {
-                 this.velocity.y += this.gravity * dt;
-             }
-             this.userGroup.position.y += this.velocity.y * dt;
-             
-             // Floor safety check
-             if (this.userGroup.position.y < groundY) {
-                 this.userGroup.position.y = groundY;
-                 this.velocity.y = 0;
-             }
+            // Airborne
+            if (isGliding && this.velocity.y < 0) {
+                // Gliding Physics
+                this.velocity.y = THREE.MathUtils.lerp(this.velocity.y, -2.0, dt * 2); // Terminal velocity for gliding
+                const forward = headDir.clone().setY(0).normalize();
+                this.userGroup.position.addScaledVector(forward, 12 * dt); // Fast glide speed
+            } else {
+                this.velocity.y += this.gravity * dt;
+            }
+            
+            // Apply Velocity (Continuous floor check)
+            const deltaY = this.velocity.y * dt;
+            if (feetPos.y + deltaY < groundY) {
+                this.userGroup.position.y = groundY;
+                this.velocity.y = 0;
+            } else {
+                this.userGroup.position.y += deltaY;
+            }
         }
+    }
+
+    handleHandCollision(dt) {
+        // If climbing, we trust the grip logic anchor. 
+        // Collision push is for when NOT holding grip (mantling/pushing).
+        if (this.isClimbing) return;
+
+        ['left', 'right'].forEach(side => {
+            const controller = this.controllers[side].object;
+            const handPos = new THREE.Vector3();
+            controller.getWorldPosition(handPos);
+
+            const ejection = this.getHandCollision(handPos);
+            if (ejection) {
+                // Apply ejection to player body
+                // This creates the "push off" effect: 
+                // Hand enters wall -> Body moves away so Hand is at surface
+                this.userGroup.position.add(ejection);
+                
+                // Haptic feedback for touching wall
+                const now = Date.now();
+                if (now - this.lastHaptic[side] > 100) {
+                    this.triggerHaptic(side, 0.5, 5);
+                    this.lastHaptic[side] = now;
+                }
+                
+                // If we are pushing down (ejection is Up), kill downward velocity
+                if (ejection.y > 0 && this.velocity.y < 0) {
+                    this.velocity.y = 0;
+                }
+            }
+        });
     }
 
     syncNetwork() {
