@@ -3,6 +3,19 @@ import React, { useRef, useEffect, useState } from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, delayRender, continueRender } from "remotion";
 import * as THREE from "three";
 import { World } from "./world.js";
+const lerpVec = (a, b, t) => {
+  return [
+    THREE.MathUtils.lerp(a[0], b[0], t),
+    THREE.MathUtils.lerp(a[1], b[1], t),
+    THREE.MathUtils.lerp(a[2], b[2], t)
+  ];
+};
+const slerpQuat = (a, b, t) => {
+  const qA = new THREE.Quaternion().fromArray(a);
+  const qB = new THREE.Quaternion().fromArray(b);
+  qA.slerp(qB, t);
+  return qA.toArray();
+};
 const ReplayComposition = ({ data }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -86,11 +99,11 @@ const ReplayComposition = ({ data }) => {
   }, [frame, data, fps]);
   return /* @__PURE__ */ jsxDEV(AbsoluteFill, { children: /* @__PURE__ */ jsxDEV("canvas", { ref: canvasRef, style: { width: "100%", height: "100%" } }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 125,
+    lineNumber: 141,
     columnNumber: 13
   }) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 124,
+    lineNumber: 140,
     columnNumber: 9
   });
 };
