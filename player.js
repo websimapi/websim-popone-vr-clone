@@ -76,6 +76,39 @@ export class Player {
         
         // Haptics cache
         this.lastHaptic = { left: 0, right: 0 };
+        
+        // Tracking stability
+        this.lastValidController = {
+            left: { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), valid: false },
+            right: { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), valid: false }
+        };
+    }
+
+    // Fix tracking glitches (zeros or massive jumps)
+    fixControllerTracking() {
+        ['left', 'right'].forEach(side => {
+            const controller = this.controllers[side].object;
+            const state = this.lastValidController[side];
+            
+            const isZero = controller.position.lengthSq() < 0.000001;
+            let isGlitch = false;
+            
+            if (state.valid && !isZero) {
+                // If jumped > 0.5m in one frame, ignore
+                if (controller.position.distanceTo(state.pos) > 0.5) isGlitch = true;
+            }
+
+            if (isZero || isGlitch) {
+                if (state.valid) {
+                    controller.position.copy(state.pos);
+                    controller.quaternion.copy(state.quat);
+                }
+            } else {
+                state.pos.copy(controller.position);
+                state.quat.copy(controller.quaternion);
+                state.valid = true;
+            }
+        });
     }
 
     // Physics helper: Get ejection vector for a point vs box colliders
@@ -122,6 +155,7 @@ export class Player {
     }
 
     onGripStart(side) {
+        this.fixControllerTracking();
         const c = this.controllers[side];
         c.grip = true;
         
@@ -143,6 +177,7 @@ export class Player {
     }
 
     onGripEnd(side) {
+        this.fixControllerTracking();
         this.controllers[side].grip = false;
         
         if (this.climbHand === side) {
@@ -151,7 +186,8 @@ export class Player {
             if (this.controllers[otherSide].grip) {
                  const handPos = new THREE.Vector3();
                  this.controllers[otherSide].object.getWorldPosition(handPos);
-                 if (this.canClimbAt(handPos)) {
+                 // More forgiving check (0.5m) to prevent dropping during swap
+                 if (this.canClimbAt(handPos, 0.5)) {
                      this.climbHand = otherSide;
                      this.climbAnchor = handPos.clone(); // New anchor
                      this.climbVelocity = new THREE.Vector3();
@@ -177,9 +213,9 @@ export class Player {
         }
     }
 
-    canClimbAt(pos) {
+    canClimbAt(pos, radius = 0.25) {
         // Slightly larger radius for detection to feel forgiving
-        const sphere = new THREE.Sphere(pos, 0.25);
+        const sphere = new THREE.Sphere(pos, radius);
         for (let obj of this.world.colliders) {
             if(!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
             const box = new THREE.Box3().setFromObject(obj);
@@ -197,6 +233,7 @@ export class Player {
 
     update(dt) {
         this.updateControllers();
+        this.fixControllerTracking();
         this.handleMovement(dt);
         this.handleHandCollision(dt);
         this.syncNetwork();
