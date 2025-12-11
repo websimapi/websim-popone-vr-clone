@@ -194,20 +194,27 @@ export class Player {
         const midPoint = lPos.clone().add(rPos).multiplyScalar(0.5);
         
         // Thresholds
-        const TOUCH_DIST = 0.15; // 15cm - slightly more forgiving
-        const OPEN_DIST = 0.50;  // 50cm (Full open)
+        const TOUCH_DIST = 0.10; // 10cm - closer required
+        const OPEN_DIST = 0.40;  // 40cm
         
+        // Head Tracking for HUD
+        const headPos = new THREE.Vector3();
+        this.camera.getWorldPosition(headPos);
+        const headRot = new THREE.Quaternion();
+        this.camera.getWorldQuaternion(headRot);
+        const headDir = new THREE.Vector3(0, 0, -1).applyQuaternion(headRot);
+
         if (this.gestureState === 'IDLE') {
             if (dist < TOUCH_DIST) {
                 this.gestureState = 'TOUCHING';
-                this.dashboard.updatePosition(midPoint, this.camera.position);
+                this.dashboard.updatePosition(midPoint, headPos);
                 this.triggerHaptic('left', 0.1, 10);
                 this.triggerHaptic('right', 0.1, 10);
             }
         }
         else if (this.gestureState === 'TOUCHING') {
             // Continuously update position to follow hands while touching
-            this.dashboard.updatePosition(midPoint, this.camera.position);
+            this.dashboard.updatePosition(midPoint, headPos);
 
             if (dist > TOUCH_DIST) {
                 if (this.dashboard.isOpen) {
@@ -224,6 +231,9 @@ export class Player {
             // Map distance to scale
             const progress = (dist - TOUCH_DIST) / (OPEN_DIST - TOUCH_DIST);
             
+            // While expanding, keep it between hands but looking at face
+            this.dashboard.updatePosition(midPoint, headPos);
+
             if (progress >= 1.0) {
                 this.dashboard.show(1.0);
                 this.gestureState = 'OPEN';
@@ -238,6 +248,17 @@ export class Player {
             }
         }
         else if (this.gestureState === 'OPEN') {
+            // HUD Mode: Follow head
+            // Target: 50cm in front of face, slightly down
+            const targetPos = headPos.clone().add(headDir.clone().multiplyScalar(0.5));
+            targetPos.y -= 0.15;
+
+            // Lerp for smooth following (damped spring effect)
+            const currentPos = this.dashboard.group.position.clone();
+            currentPos.lerp(targetPos, 0.1);
+
+            this.dashboard.updatePosition(currentPos, headPos);
+
             if (dist < TOUCH_DIST) {
                 // Hands brought together -> Close
                 this.dashboard.hide();

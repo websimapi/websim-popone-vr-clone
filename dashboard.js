@@ -21,13 +21,13 @@ export class Dashboard {
     setupUI() {
         // Panel
         const panel = new THREE.Mesh(
-            new THREE.BoxGeometry(0.8, 0.5, 0.02),
+            new THREE.BoxGeometry(0.4, 0.25, 0.02),
             new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.5 })
         );
         this.group.add(panel);
 
         // Buttons
-        const btnGeo = new THREE.BoxGeometry(0.2, 0.1, 0.04);
+        const btnGeo = new THREE.BoxGeometry(0.1, 0.05, 0.02);
         const btnMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
 
         const labels = ["RECORD", "DASH", "MAP", "SETTINGS", "SOCIAL", "EXIT"];
@@ -38,9 +38,9 @@ export class Dashboard {
             const row = Math.floor(i / 3);
 
             btn.position.set(
-                (col - 1) * 0.25,
-                0.1 - (row * 0.2),
-                0.02
+                (col - 1) * 0.12,
+                0.05 - (row * 0.1),
+                0.015
             );
 
             // Text Label
@@ -51,10 +51,10 @@ export class Dashboard {
 
             const tex = new THREE.CanvasTexture(canvas);
             const labelMesh = new THREE.Mesh(
-                new THREE.PlaneGeometry(0.18, 0.09),
+                new THREE.PlaneGeometry(0.09, 0.045),
                 new THREE.MeshBasicMaterial({ map: tex, transparent: true })
             );
-            labelMesh.position.z = 0.021;
+            labelMesh.position.z = 0.011;
             btn.add(labelMesh);
 
             btn.userData = {
@@ -123,7 +123,7 @@ export class Dashboard {
                 // Distance check for "Touch"
                 const dist = handPos.distanceTo(btnWorld);
 
-                if (dist < 0.08) {
+                if (dist < 0.04) {
                     if (!btn.userData.isHovered) {
                         btn.userData.isHovered = true;
                         btn.material.emissive.setHex(0x555555);
