@@ -9,16 +9,31 @@ export class World {
     }
 
     async loadAssets() {
-        this.concreteTex = this.textureLoader.load('concrete.png');
-        this.concreteTex.wrapS = this.concreteTex.wrapT = THREE.RepeatWrapping;
+        const loadTex = (url) => new Promise((resolve) => {
+            this.textureLoader.load(url, (tex) => resolve(tex), undefined, () => resolve(null));
+        });
 
-        this.metalTex = this.textureLoader.load('metal_floor.png');
-        this.metalTex.wrapS = this.metalTex.wrapT = THREE.RepeatWrapping;
+        const [concrete, metal, env] = await Promise.all([
+            loadTex('concrete.png'),
+            loadTex('metal_floor.png'),
+            loadTex('skybox.png')
+        ]);
 
-        const envMap = this.textureLoader.load('skybox.png');
-        envMap.mapping = THREE.EquirectangularReflectionMapping;
-        this.scene.background = envMap;
-        this.scene.environment = envMap;
+        if (concrete) {
+            this.concreteTex = concrete;
+            this.concreteTex.wrapS = this.concreteTex.wrapT = THREE.RepeatWrapping;
+        }
+
+        if (metal) {
+            this.metalTex = metal;
+            this.metalTex.wrapS = this.metalTex.wrapT = THREE.RepeatWrapping;
+        }
+
+        if (env) {
+            env.mapping = THREE.EquirectangularReflectionMapping;
+            this.scene.background = env;
+            this.scene.environment = env;
+        }
     }
 
     createLobby() {
