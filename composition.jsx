@@ -11,6 +11,9 @@ const ReplayComposition = ({ data }) => {
   const threeRef = useRef(null);
   useEffect(() => {
     if (!canvasRef.current) return;
+    window.dispatchEvent(new CustomEvent("remotion-canvas-created", {
+      detail: canvasRef.current
+    }));
     if (threeRef.current) return;
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(5592405, 2e-3);
@@ -86,11 +89,11 @@ const ReplayComposition = ({ data }) => {
   }, [frame, data, fps]);
   return /* @__PURE__ */ jsxDEV(AbsoluteFill, { children: /* @__PURE__ */ jsxDEV("canvas", { ref: canvasRef, style: { width: "100%", height: "100%" } }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 125,
+    lineNumber: 131,
     columnNumber: 13
   }) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 124,
+    lineNumber: 130,
     columnNumber: 9
   });
 };
