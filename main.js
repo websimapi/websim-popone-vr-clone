@@ -86,6 +86,7 @@ world.createLobby();
 const pod = world.createPod();
 
 player = new Player(scene, renderer, camera, world, network, audio);
+window.player = player; // Expose for Remotion integration
 
 // Network Logic
 network.init((state) => {

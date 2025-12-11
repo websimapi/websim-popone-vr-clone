@@ -17,28 +17,27 @@ export class Dashboard {
         // Replay Data
         this.frames = [];
         this.recordingStartTime = 0;
-        this.replayDuration = 0;
         
         // Replay System
-        this.replayCanvas = null;
-        this.screenMat = null;
-
-        // Listen for Remotion Canvas
-        window.addEventListener('remotion-canvas-created', (e) => {
-            this.replayCanvas = e.detail;
-            if (this.screenMat) {
-                if (this.screenMat.map) this.screenMat.map.dispose();
-                
-                this.screenMat.map = new THREE.CanvasTexture(this.replayCanvas);
-                this.screenMat.map.minFilter = THREE.LinearFilter;
-                this.screenMat.map.magFilter = THREE.LinearFilter;
-                this.screenMat.map.colorSpace = THREE.SRGBColorSpace;
-                this.screenMat.map.flipY = false;
-                
-                this.screenMat.color.setHex(0xffffff); // Reset color
-                this.screenMat.needsUpdate = true;
-            }
-        });
+        this.isReplaying = false;
+        this.replayStartTime = 0;
+        this.replayTarget = new THREE.WebGLRenderTarget(512, 288);
+        this.replayCamera = new THREE.PerspectiveCamera(70, 16/9, 0.1, 1000);
+        this.replayCamera.layers.set(0); // See World
+        this.replayCamera.layers.enable(2); // See Ghost
+        
+        // Ghost Player (Layer 2)
+        this.replayGroup = new THREE.Group();
+        this.scene.add(this.replayGroup);
+        
+        const ghostMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+        this.ghostHead = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), ghostMat);
+        this.ghostHead.layers.set(2);
+        this.ghostL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.15), ghostMat);
+        this.ghostL.layers.set(2);
+        this.ghostR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.15), ghostMat);
+        this.ghostR.layers.set(2);
+        this.replayGroup.add(this.ghostHead, this.ghostL, this.ghostR);
 
         this.setupUI();
     }
@@ -46,11 +45,10 @@ export class Dashboard {
     setupUI() {
         // Replay Screen
         const screenGeo = new THREE.PlaneGeometry(0.3, 0.169);
-        // Start with black screen
-        this.screenMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-        const screen = new THREE.Mesh(screenGeo, this.screenMat);
-        screen.position.set(0, 0.25, 0); // Above panel
-        this.group.add(screen);
+        const screenMat = new THREE.MeshBasicMaterial({ map: this.replayTarget.texture });
+        this.screen = new THREE.Mesh(screenGeo, screenMat);
+        this.screen.position.set(0, 0.25, 0); // Above panel
+        this.group.add(this.screen);
 
         // Panel
         const panel = new THREE.Mesh(
@@ -152,9 +150,50 @@ export class Dashboard {
             this.recordFrame(controllers);
         }
 
-        // Update Screen Texture if playing
-        if (this.screenMat && this.screenMat.map && this.replayCanvas) {
-            this.screenMat.map.needsUpdate = true;
+        // External Source Update (Remotion)
+        if (this.externalSource && this.screen.material.map) {
+            this.screen.material.map.needsUpdate = true;
+        }
+
+        // Replay Rendering Logic (Internal)
+        if (this.isReplaying && this.frames.length > 0 && !this.externalSource) {
+            const time = (Date.now() - this.replayStartTime) % this.replayDuration;
+            
+            // Find frame
+            const frameIdx = Math.floor((time / this.replayDuration) * this.frames.length);
+            const frame = this.frames[Math.min(frameIdx, this.frames.length - 1)];
+
+            if (frame) {
+                const [hPos, hRot] = frame.h;
+                const [lPos, lRot] = frame.l;
+                const [rPos, rRot] = frame.r;
+
+                this.ghostHead.position.fromArray(hPos);
+                this.ghostHead.quaternion.fromArray(hRot);
+                this.ghostL.position.fromArray(lPos);
+                this.ghostL.quaternion.fromArray(lRot);
+                this.ghostR.position.fromArray(rPos);
+                this.ghostR.quaternion.fromArray(rRot);
+
+                // Camera Follow (Third Person behind recorded head)
+                const targetPos = new THREE.Vector3().fromArray(hPos);
+                const targetRot = new THREE.Quaternion().fromArray(hRot);
+                const offset = new THREE.Vector3(0, 0.5, 2.0).applyQuaternion(targetRot);
+                
+                this.replayCamera.position.copy(targetPos).add(offset);
+                this.replayCamera.lookAt(targetPos);
+
+                // Render to Texture
+                const currentXr = this.renderer.xr.enabled;
+                this.renderer.xr.enabled = false;
+                
+                const currentTarget = this.renderer.getRenderTarget();
+                this.renderer.setRenderTarget(this.replayTarget);
+                this.renderer.render(this.scene, this.replayCamera);
+                this.renderer.setRenderTarget(currentTarget);
+                
+                this.renderer.xr.enabled = currentXr;
+            }
         }
 
         // Only allow interaction if fully visible and mostly expanded
@@ -225,6 +264,8 @@ export class Dashboard {
             this.toggleRecording();
         } else if (id === 1) {
             this.saveReplay();
+        } else if (id === 5) {
+            this.exitReplay();
         }
     }
 
@@ -242,73 +283,68 @@ export class Dashboard {
         this.frames = [];
         this.recordingStartTime = Date.now();
         this.updateBtn(0, "STOP", '#00cc00');
-        
-        // Reset screen
-        if (this.screenMat.map) {
-            this.screenMat.map.dispose();
-            this.screenMat.map = null;
-        }
-        this.screenMat.color.setHex(0x330000); // Recording indicator (Dark Red)
     }
 
     stopRecording() {
         if (!this.isRecording) return;
         this.isRecording = false;
         
+        // Reset external source if any
+        this.clearExternalSource();
+
         this.replayDuration = Date.now() - this.recordingStartTime;
+        this.replayStartTime = Date.now();
+        this.isReplaying = true;
+
+        this.updateBtn(0, "RECORD", '#cc0000');
+        this.updateBtn(1, "SAVE", '#00aa00');
+        console.log("Replay ready. Frames:", this.frames.length);
+    }
+
+    saveReplay() {
+        if (this.frames.length === 0) return;
         
-        // Trigger Remotion Render
+        // Stop internal replay loop to save performance and switch to external view
+        this.isReplaying = false;
+
         const replayData = {
             date: new Date().toISOString(),
             duration: this.replayDuration,
             frames: this.frames
         };
-        
-        window.dispatchEvent(new CustomEvent('render-replay', { detail: replayData }));
 
-        this.updateBtn(0, "RECORD", '#cc0000');
-        this.updateBtn(1, "SAVE", '#00aa00');
+        // Don't end session, just emit
+        window.dispatchEvent(new CustomEvent('render-replay', { 
+            detail: replayData 
+        }));
+        
+        this.updateBtn(1, "RENDERING...", '#555555');
     }
 
-    saveReplay() {
-        if (!this.replayCanvas) return;
+    exitReplay() {
+        this.frames = [];
+        this.isReplaying = false;
+        this.clearExternalSource();
+        // Notify remotion to stop
+        window.dispatchEvent(new CustomEvent('close-replay'));
+        this.updateBtn(0, "RECORD", '#cc0000');
+        this.updateBtn(1, "SAVE", '#444444');
+    }
 
-        // Record the canvas stream
-        this.updateBtn(1, "SAVING...", '#aa5500');
-        
-        try {
-            const stream = this.replayCanvas.captureStream(30); // 30 FPS
-            const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-            const chunks = [];
-            
-            recorder.ondataavailable = (e) => {
-                if (e.data.size > 0) chunks.push(e.data);
-            };
-            
-            recorder.onstop = () => {
-                const blob = new Blob(chunks, { type: 'video/webm' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `skydrop-replay-${Date.now()}.webm`;
-                a.click();
-                URL.revokeObjectURL(url);
-                
-                this.updateBtn(1, "SAVED", '#555555');
-                setTimeout(() => this.updateBtn(1, "SAVE", '#00aa00'), 2000);
-            };
-            
-            recorder.start();
-            
-            // Record for the duration of the clip
-            setTimeout(() => {
-                recorder.stop();
-            }, this.replayDuration + 500); // Add slight buffer
-            
-        } catch (e) {
-            console.error("Recording failed", e);
-            this.updateBtn(1, "ERROR", '#cc0000');
-        }
+    setExternalSource(element) {
+        this.externalSource = element;
+        const tex = new THREE.CanvasTexture(element);
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.colorSpace = THREE.SRGBColorSpace;
+        this.screen.material.map = tex;
+        this.screen.material.needsUpdate = true;
+    }
+
+    clearExternalSource() {
+        this.externalSource = null;
+        this.screen.material.map = this.replayTarget.texture;
+        this.screen.material.needsUpdate = true;
     }
 
     updateBtn(id, text, colorHex) {
