@@ -23,14 +23,55 @@ const RemotionOverlay = () => {
   }, []);
   useEffect(() => {
     if (!replayData || !containerRef.current) return;
+    let recorder = null;
+    let recordingTimer = null;
     const interval = setInterval(() => {
       const canvas = containerRef.current.querySelector("canvas");
       if (canvas && window.player && window.player.dashboard) {
-        window.player.dashboard.setExternalSource(canvas);
         clearInterval(interval);
+        window.player.dashboard.setExternalSource(canvas);
+        try {
+          const captureFn = canvas.captureStream || canvas.mozCaptureStream;
+          if (!captureFn) {
+            console.warn("Canvas capture not supported");
+            window.dispatchEvent(new CustomEvent("render-complete"));
+            return;
+          }
+          const stream = captureFn.call(canvas, 30);
+          recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+          const chunks = [];
+          recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) chunks.push(e.data);
+          };
+          recorder.onstop = () => {
+            const blob = new Blob(chunks, { type: "video/webm" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `skydrop-replay-${Date.now()}.webm`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            window.dispatchEvent(new CustomEvent("render-complete"));
+          };
+          recorder.start();
+          recordingTimer = setTimeout(() => {
+            if (recorder && recorder.state === "recording") {
+              recorder.stop();
+            }
+          }, replayData.duration);
+        } catch (e) {
+          console.error("Recording error", e);
+          window.dispatchEvent(new CustomEvent("render-complete"));
+        }
       }
     }, 100);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (recordingTimer) clearTimeout(recordingTimer);
+      if (recorder && recorder.state === "recording") recorder.stop();
+    };
   }, [replayData]);
   if (!replayData) return null;
   const fps = 30;
@@ -63,12 +104,12 @@ const RemotionOverlay = () => {
     false,
     {
       fileName: "<stdin>",
-      lineNumber: 58,
+      lineNumber: 112,
       columnNumber: 13
     }
   ) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 49,
+    lineNumber: 103,
     columnNumber: 9
   });
 };
@@ -76,7 +117,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 76,
+    lineNumber: 130,
     columnNumber: 29
   }));
 }

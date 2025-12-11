@@ -39,6 +39,16 @@ export class Dashboard {
         this.ghostR.layers.set(2);
         this.replayGroup.add(this.ghostHead, this.ghostL, this.ghostR);
 
+        // Listen for render completion
+        window.addEventListener('render-complete', () => {
+            if (this.buttons[1]) {
+                this.updateBtn(1, "SAVED", '#00aa00');
+                setTimeout(() => {
+                    this.updateBtn(1, "SAVE", '#444444');
+                }, 3000);
+            }
+        });
+
         this.setupUI();
     }
 
