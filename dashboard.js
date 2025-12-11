@@ -13,8 +13,10 @@ export class Dashboard {
 
         this.buttons = [];
         this.isRecording = false;
-        this.recorder = null;
-        this.chunks = [];
+        
+        // Replay Data
+        this.frames = [];
+        this.recordingStartTime = 0;
 
         this.setupUI();
     }
@@ -115,6 +117,11 @@ export class Dashboard {
     }
 
     update(controllers) {
+        // Recording Logic
+        if (this.isRecording) {
+            this.recordFrame(controllers);
+        }
+
         // Only allow interaction if fully visible and mostly expanded
         if (!this.group.visible || this.group.scale.x < 0.9) return;
 
@@ -130,10 +137,10 @@ export class Dashboard {
                 const btnWorld = new THREE.Vector3();
                 btn.getWorldPosition(btnWorld);
 
-                // Distance check for "Touch"
+                // Distance check for "Touch" - Tighter hitbox
                 const dist = handPos.distanceTo(btnWorld);
 
-                if (dist < 0.04) {
+                if (dist < 0.035) { // Reduced from 0.04 for better precision
                     if (!btn.userData.isHovered) {
                         btn.userData.isHovered = true;
                         btn.material.emissive.setHex(0x555555);
@@ -156,6 +163,28 @@ export class Dashboard {
         });
     }
 
+    recordFrame(controllers) {
+        const headPos = new THREE.Vector3();
+        const headRot = new THREE.Quaternion();
+        this.camera.getWorldPosition(headPos);
+        this.camera.getWorldQuaternion(headRot);
+
+        const l = controllers.left.object;
+        const r = controllers.right.object;
+        
+        const lPos = new THREE.Vector3(); l.getWorldPosition(lPos);
+        const lRot = new THREE.Quaternion(); l.getWorldQuaternion(lRot);
+        const rPos = new THREE.Vector3(); r.getWorldPosition(rPos);
+        const rRot = new THREE.Quaternion(); r.getWorldQuaternion(rRot);
+
+        this.frames.push({
+            t: Date.now() - this.recordingStartTime,
+            h: [headPos.toArray(), headRot.toArray()],
+            l: [lPos.toArray(), lRot.toArray()],
+            r: [rPos.toArray(), rRot.toArray()]
+        });
+    }
+
     onClick(id) {
         if (id === 0) {
             this.toggleRecording();
@@ -172,54 +201,43 @@ export class Dashboard {
 
     startRecording() {
         if (this.isRecording) return;
-        try {
-            // WebXR rendering writes to the base layer. captureStream() on the canvas *should* catch it.
-            const stream = this.renderer.domElement.captureStream(30);
-            
-            // Add Audio Tracks
-            if (this.audioManager) {
-                const audioStream = this.audioManager.getStream();
-                if (audioStream) {
-                    audioStream.getAudioTracks().forEach(track => stream.addTrack(track));
-                }
-            }
-
-            this.recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-            this.chunks = [];
-
-            this.recorder.ondataavailable = (e) => {
-                if (e.data.size > 0) this.chunks.push(e.data);
-            };
-
-            this.recorder.onstop = () => {
-                const blob = new Blob(this.chunks, { type: 'video/webm' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = `vr-recording-${Date.now()}.webm`;
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(() => {
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                }, 100);
-
-                this.updateBtn(0, "RECORD", '#cc0000');
-            };
-
-            this.recorder.start();
-            this.isRecording = true;
-            this.updateBtn(0, "STOP", '#00cc00'); // Green for active recording state (or stop button)
-        } catch (e) {
-            console.error("Recording error:", e);
-        }
+        this.isRecording = true;
+        this.frames = [];
+        this.recordingStartTime = Date.now();
+        this.updateBtn(0, "STOP", '#00cc00');
     }
 
     stopRecording() {
-        if (!this.recorder || !this.isRecording) return;
-        this.recorder.stop();
+        if (!this.isRecording) return;
         this.isRecording = false;
+
+        // Create Replay JSON
+        const replayData = {
+            date: new Date().toISOString(),
+            duration: Date.now() - this.recordingStartTime,
+            frames: this.frames
+        };
+
+        try {
+            const blob = new Blob([JSON.stringify(replayData)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `replay-${Date.now()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 100);
+
+            this.updateBtn(0, "RECORD", '#cc0000');
+        } catch (e) {
+            console.error("Save error:", e);
+            this.updateBtn(0, "ERROR", '#cc0000');
+        }
     }
 
     updateBtn(id, text, colorHex) {

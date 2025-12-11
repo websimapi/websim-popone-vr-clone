@@ -50,7 +50,7 @@ export class Player {
         this.lastHaptic = { left: 0, right: 0 };
         
         // Gesture state
-        this.gestureState = 'IDLE'; // IDLE, TOUCHING, EXPANDING, OPEN
+        this.gestureState = 'IDLE'; // IDLE, TOUCHING, EXPANDING, OPEN, COOLDOWN
     }
 
     // Physics helper: Get ejection vector for a point vs box colliders
@@ -204,15 +204,16 @@ export class Player {
         
         const dist = lPos.distanceTo(rPos);
         const midPoint = lPos.clone().add(rPos).multiplyScalar(0.5);
+        const toHands = midPoint.clone().sub(headPos).normalize();
         
         // Thresholds
         const TOUCH_DIST = 0.12; 
+        const RESET_DIST = 0.25; // Distance to reset COOLDOWN
         const OPEN_DIST = 0.50; 
         
         if (this.gestureState === 'IDLE') {
             if (dist < TOUCH_DIST) {
                 // Only activate if hands are roughly in front of the user
-                const toHands = midPoint.clone().sub(headPos).normalize();
                 if (toHands.dot(headDir) > 0.5) {
                     this.gestureState = 'TOUCHING';
                     this.dashboard.updatePosition(midPoint, headPos);
@@ -225,14 +226,8 @@ export class Player {
             this.dashboard.updatePosition(midPoint, headPos);
 
             if (dist > TOUCH_DIST) {
-                if (this.dashboard.isOpen) {
-                    // Was open, now closing
-                    this.dashboard.hide();
-                    this.gestureState = 'IDLE';
-                } else {
-                    // Was closed, now opening
-                    this.gestureState = 'EXPANDING';
-                }
+                // Start expanding
+                this.gestureState = 'EXPANDING';
             }
         }
         else if (this.gestureState === 'EXPANDING') {
@@ -270,10 +265,17 @@ export class Player {
             this.dashboard.updatePosition(currentPos, headPos);
 
             if (dist < TOUCH_DIST) {
+                // Close Menu
                 this.dashboard.hide();
-                this.gestureState = 'TOUCHING';
-                this.triggerHaptic('left', 0.2, 20);
-                this.triggerHaptic('right', 0.2, 20);
+                this.gestureState = 'COOLDOWN'; // Wait for separation
+                this.triggerHaptic('left', 0.2, 50);
+                this.triggerHaptic('right', 0.2, 50);
+            }
+        }
+        else if (this.gestureState === 'COOLDOWN') {
+            // User must separate hands to reset logic
+            if (dist > RESET_DIST) {
+                this.gestureState = 'IDLE';
             }
         }
     }
