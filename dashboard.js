@@ -22,13 +22,13 @@ export class Dashboard {
     setupUI() {
         // Panel
         const panel = new THREE.Mesh(
-            new THREE.BoxGeometry(0.4, 0.25, 0.02),
+            new THREE.BoxGeometry(0.3, 0.2, 0.02),
             new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.5 })
         );
         this.group.add(panel);
 
         // Buttons
-        const btnGeo = new THREE.BoxGeometry(0.1, 0.05, 0.02);
+        const btnGeo = new THREE.BoxGeometry(0.08, 0.04, 0.02);
         const btnMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
 
         const labels = ["RECORD", "DASH", "MAP", "SETTINGS", "SOCIAL", "EXIT"];
@@ -39,8 +39,8 @@ export class Dashboard {
             const row = Math.floor(i / 3);
 
             btn.position.set(
-                (col - 1) * 0.12,
-                0.05 - (row * 0.1),
+                (col - 1) * 0.09,
+                0.04 - (row * 0.07),
                 0.015
             );
 
@@ -52,7 +52,7 @@ export class Dashboard {
 
             const tex = new THREE.CanvasTexture(canvas);
             const labelMesh = new THREE.Mesh(
-                new THREE.PlaneGeometry(0.09, 0.045),
+                new THREE.PlaneGeometry(0.07, 0.035),
                 new THREE.MeshBasicMaterial({ map: tex, transparent: true })
             );
             labelMesh.position.z = 0.011;
@@ -82,7 +82,15 @@ export class Dashboard {
     }
 
     updatePosition(pos, lookAtPos) {
-        this.group.position.copy(pos);
+        // Convert world position to local space of the parent (userGroup)
+        if (this.group.parent) {
+            const localPos = this.group.parent.worldToLocal(pos.clone());
+            this.group.position.copy(localPos);
+        } else {
+            this.group.position.copy(pos);
+        }
+        
+        // lookAt works in World Space, so we can pass the lookAtPos directly
         this.group.lookAt(lookAtPos);
     }
 
@@ -107,7 +115,8 @@ export class Dashboard {
     }
 
     update(controllers) {
-        if (!this.group.visible) return;
+        // Only allow interaction if fully visible and mostly expanded
+        if (!this.group.visible || this.group.scale.x < 0.9) return;
 
         ['left', 'right'].forEach(side => {
             const c = controllers[side];

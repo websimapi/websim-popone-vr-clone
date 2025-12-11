@@ -190,49 +190,54 @@ export class Player {
     }
 
     handleDashboardGesture() {
-        // Use Local coordinates because Dashboard and Camera/Controllers are siblings in userGroup
-        const lPos = this.controller1.position.clone();
-        const rPos = this.controller2.position.clone();
+        // Use World coordinates for robust positioning regardless of player rotation/movement
+        const headPos = new THREE.Vector3();
+        this.camera.getWorldPosition(headPos);
+        const headRot = new THREE.Quaternion();
+        this.camera.getWorldQuaternion(headRot);
+        const headDir = new THREE.Vector3(0, 0, -1).applyQuaternion(headRot);
+
+        const lPos = new THREE.Vector3(); 
+        this.controller1.getWorldPosition(lPos);
+        const rPos = new THREE.Vector3(); 
+        this.controller2.getWorldPosition(rPos);
+        
         const dist = lPos.distanceTo(rPos);
         const midPoint = lPos.clone().add(rPos).multiplyScalar(0.5);
         
         // Thresholds
-        const TOUCH_DIST = 0.10; // 10cm - closer required
-        const OPEN_DIST = 0.40;  // 40cm
+        const TOUCH_DIST = 0.12; 
+        const OPEN_DIST = 0.50; 
         
-        // Head Tracking for HUD (Local Space)
-        const headPos = this.camera.position.clone();
-        const headRot = this.camera.quaternion.clone();
-        const headDir = new THREE.Vector3(0, 0, -1).applyQuaternion(headRot);
-
         if (this.gestureState === 'IDLE') {
             if (dist < TOUCH_DIST) {
-                this.gestureState = 'TOUCHING';
-                this.dashboard.updatePosition(midPoint, headPos);
-                this.triggerHaptic('left', 0.1, 10);
-                this.triggerHaptic('right', 0.1, 10);
+                // Only activate if hands are roughly in front of the user
+                const toHands = midPoint.clone().sub(headPos).normalize();
+                if (toHands.dot(headDir) > 0.5) {
+                    this.gestureState = 'TOUCHING';
+                    this.dashboard.updatePosition(midPoint, headPos);
+                    this.triggerHaptic('left', 0.1, 10);
+                    this.triggerHaptic('right', 0.1, 10);
+                }
             }
         }
         else if (this.gestureState === 'TOUCHING') {
-            // Continuously update position to follow hands while touching
             this.dashboard.updatePosition(midPoint, headPos);
 
             if (dist > TOUCH_DIST) {
                 if (this.dashboard.isOpen) {
-                    // Touched while open -> Close confirmed, returning to IDLE logic
+                    // Was open, now closing
                     this.dashboard.hide();
                     this.gestureState = 'IDLE';
                 } else {
-                    // Touched while closed -> Start expanding
+                    // Was closed, now opening
                     this.gestureState = 'EXPANDING';
                 }
             }
         }
         else if (this.gestureState === 'EXPANDING') {
-            // Map distance to scale
             const progress = (dist - TOUCH_DIST) / (OPEN_DIST - TOUCH_DIST);
             
-            // While expanding, keep it between hands but looking at face
             this.dashboard.updatePosition(midPoint, headPos);
 
             if (progress >= 1.0) {
@@ -241,7 +246,6 @@ export class Player {
                 this.triggerHaptic('left', 0.5, 20);
                 this.triggerHaptic('right', 0.5, 20);
             } else if (progress <= 0) {
-                // Collapsed back to touch
                 this.dashboard.hide();
                 this.gestureState = 'TOUCHING';
             } else {
@@ -249,27 +253,25 @@ export class Player {
             }
         }
         else if (this.gestureState === 'OPEN') {
-            // HUD Mode: Follow head (Local Space)
-            // Target: 50cm in front of face, slightly down
-            const targetPos = headPos.clone().add(headDir.clone().multiplyScalar(0.5));
+            // HUD Mode: Follow head, placed in front
+            const targetPos = headPos.clone().add(headDir.clone().multiplyScalar(0.6));
             targetPos.y -= 0.15;
 
-            // Lerp for smooth following (damped spring effect)
-            const currentPos = this.dashboard.group.position.clone();
+            // Lerp current world position
+            const currentPos = new THREE.Vector3();
+            this.dashboard.group.getWorldPosition(currentPos);
             
-            // Snap if too far (prevents getting lost during teleport/snap turn/fast moves)
             if (currentPos.distanceTo(targetPos) > 1.0) {
                 currentPos.copy(targetPos);
             } else {
-                currentPos.lerp(targetPos, 0.15); // Slightly faster follow
+                currentPos.lerp(targetPos, 0.15);
             }
 
             this.dashboard.updatePosition(currentPos, headPos);
 
             if (dist < TOUCH_DIST) {
-                // Hands brought together -> Close
                 this.dashboard.hide();
-                this.gestureState = 'TOUCHING'; // Reset to touching state
+                this.gestureState = 'TOUCHING';
                 this.triggerHaptic('left', 0.2, 20);
                 this.triggerHaptic('right', 0.2, 20);
             }
