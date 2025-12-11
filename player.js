@@ -191,20 +191,24 @@ export class Player {
         const lPos = new THREE.Vector3(); this.controller1.getWorldPosition(lPos);
         const rPos = new THREE.Vector3(); this.controller2.getWorldPosition(rPos);
         const dist = lPos.distanceTo(rPos);
+        const midPoint = lPos.clone().add(rPos).multiplyScalar(0.5);
         
         // Thresholds
-        const TOUCH_DIST = 0.10; // 10cm
-        const OPEN_DIST = 0.40;  // 40cm (Full open)
+        const TOUCH_DIST = 0.15; // 15cm - slightly more forgiving
+        const OPEN_DIST = 0.50;  // 50cm (Full open)
         
         if (this.gestureState === 'IDLE') {
             if (dist < TOUCH_DIST) {
                 this.gestureState = 'TOUCHING';
-                this.dashboard.recenter(); // Prep position
+                this.dashboard.updatePosition(midPoint, this.camera.position);
                 this.triggerHaptic('left', 0.1, 10);
                 this.triggerHaptic('right', 0.1, 10);
             }
         }
         else if (this.gestureState === 'TOUCHING') {
+            // Continuously update position to follow hands while touching
+            this.dashboard.updatePosition(midPoint, this.camera.position);
+
             if (dist > TOUCH_DIST) {
                 if (this.dashboard.isOpen) {
                     // Touched while open -> Close confirmed, returning to IDLE logic

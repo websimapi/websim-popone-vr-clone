@@ -80,20 +80,9 @@ export class Dashboard {
         ctx.fillText(text, 64, 32);
     }
 
-    recenter() {
-        // Teleport in front of player
-        const headPos = new THREE.Vector3();
-        const headRot = new THREE.Quaternion();
-        this.camera.getWorldPosition(headPos);
-        this.camera.getWorldQuaternion(headRot);
-
-        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(headRot);
-        // Place 0.6m in front, slightly down
-        const target = headPos.add(forward.multiplyScalar(0.6));
-        target.y -= 0.1;
-
-        this.group.position.copy(target);
-        this.group.lookAt(this.camera.position);
+    updatePosition(pos, lookAtPos) {
+        this.group.position.copy(pos);
+        this.group.lookAt(lookAtPos);
     }
 
     show(scale = 1.0) {
@@ -112,7 +101,6 @@ export class Dashboard {
     toggle() {
         if (this.isOpen) this.hide();
         else {
-            this.recenter();
             this.show();
         }
     }
