@@ -24,12 +24,30 @@
             position: absolute; bottom: 20px; left: 20px; color: rgba(255,255,255,0.5);
             pointer-events: none; font-size: 0.8rem;
         }
+        #remotion-root {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 20; pointer-events: none;
+            display: flex; justify-content: center; align-items: center;
+        }
+        /* Allow interaction with remotion controls */
+        #remotion-root > * { pointer-events: auto; }
     </style>
     <script type="importmap">
         {
             "imports": {
                 "three": "https://esm.sh/three@0.160.0",
-                "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/"
+                "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/",
+                "react": "https://esm.sh/react@18.3.1?dev",
+                "react-dom": "https://esm.sh/react-dom@18.3.1?dev",
+                "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?dev",
+                "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime?dev",
+                "react/jsx-dev-runtime": "https://esm.sh/react@18.3.1/jsx-dev-runtime?dev",
+                "remotion": "https://esm.sh/remotion@4.0.350?external=react,react-dom&dev",
+                "@remotion/player": "https://esm.sh/@remotion/player@4.0.350?external=react,react-dom&dev",
+                "@remotion/gif": "https://esm.sh/@remotion/gif@4.0.350?external=react,react-dom,remotion&dev",
+                "@remotion/transitions": "https://esm.sh/@remotion/transitions@4.0.350?external=react,react-dom,remotion&dev",
+                "@websim/remotion/player": "https://esm.websim.com/@websim/remotion/player",
+                "mediabunny": "https://esm.sh/mediabunny@1.19.1"
             }
         }
     </script>
@@ -45,7 +63,9 @@
         <button id="start-btn">ENTER VR</button>
     </div>
     <div id="info">Waiting for VR session...</div>
+    <div id="remotion-root"></div>
     <script type="module" src="./main.js"></script>
+    <script type="module" src="./remotion-overlay.jsx"></script>
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>

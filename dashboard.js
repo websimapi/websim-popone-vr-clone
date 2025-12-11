@@ -219,19 +219,18 @@ export class Dashboard {
         };
 
         try {
-            const blob = new Blob([JSON.stringify(replayData)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = `replay-${Date.now()}.json`;
-            document.body.appendChild(a);
-            a.click();
-            
-            setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }, 100);
+            console.log("Replay captured. Frames:", this.frames.length);
+
+            // Exit VR to view the player (DOM overlay is not visible in VR)
+            const session = this.renderer.xr.getSession();
+            if (session) {
+                session.end();
+            }
+
+            // Dispatch event for React/Remotion to pick up
+            window.dispatchEvent(new CustomEvent('render-replay', { 
+                detail: replayData 
+            }));
 
             this.updateBtn(0, "RECORD", '#cc0000');
         } catch (e) {
