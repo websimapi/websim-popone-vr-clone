@@ -63,9 +63,13 @@ export class Player {
         // Event Listeners
         this.controller1.addEventListener('squeezestart', () => this.onGripStart('left'));
         this.controller1.addEventListener('squeezeend', () => this.onGripEnd('left'));
+        this.controller1.addEventListener('selectstart', () => this.onGripStart('left'));
+        this.controller1.addEventListener('selectend', () => this.onGripEnd('left'));
         
         this.controller2.addEventListener('squeezestart', () => this.onGripStart('right'));
         this.controller2.addEventListener('squeezeend', () => this.onGripEnd('right'));
+        this.controller2.addEventListener('selectstart', () => this.onGripStart('right'));
+        this.controller2.addEventListener('selectend', () => this.onGripEnd('right'));
 
         // Peers visualization
         this.peerMeshes = {};
@@ -126,7 +130,10 @@ export class Player {
             this.isClimbing = true;
             this.climbHand = side;
             this.velocity.set(0,0,0);
-            this.previousHandPos = handPos.clone();
+            
+            // Anchor Logic: Lock this world point
+            this.climbAnchor = handPos.clone();
+            
             this.climbVelocity = new THREE.Vector3();
             this.audio.play('climb');
             this.triggerHaptic(side, 1.0, 10);
@@ -144,7 +151,7 @@ export class Player {
                  this.controllers[otherSide].object.getWorldPosition(handPos);
                  if (this.canClimbAt(handPos)) {
                      this.climbHand = otherSide;
-                     this.previousHandPos = handPos.clone();
+                     this.climbAnchor = handPos.clone(); // New anchor
                      this.climbVelocity = new THREE.Vector3();
                      return;
                  }
@@ -154,10 +161,10 @@ export class Player {
             this.isClimbing = false;
             this.climbHand = null;
             
-            // Fling mechanic: Throw player based on hand velocity
+            // Fling mechanic: Throw player based on body velocity
             if (this.climbVelocity) {
-                // Invert delta because pulling hand down throws player up
-                this.velocity.copy(this.climbVelocity).multiplyScalar(-1.5);
+                // Use calculated body velocity directly
+                this.velocity.copy(this.climbVelocity);
                 this.velocity.clampLength(0, 15); // Cap speed
                 
                 // Add upward boost if flinging up (vault assist)
@@ -212,20 +219,31 @@ export class Player {
         // 1. Climbing Logic
         if (this.isClimbing && this.climbHand) {
             const controller = this.controllers[this.climbHand].object;
-            const currentHandPos = new THREE.Vector3();
-            controller.getWorldPosition(currentHandPos);
             
-            const delta = currentHandPos.clone().sub(this.previousHandPos);
+            // Anchor Logic: Move Body to keep Hand at Anchor
+            // We calculate where the userGroup MUST be so that the hand (local offset) 
+            // ends up at the climbAnchor (world position).
             
-            // Calculate velocity for throw (smoothed)
-            const instVel = delta.clone().divideScalar(dt || 0.016);
+            const handLocal = controller.position.clone();
+            // Rotate local hand offset by player rotation
+            const handWorldOffset = handLocal.applyQuaternion(this.userGroup.quaternion);
+            
+            // Target body position = Anchor - HandOffset
+            const targetBodyPos = this.climbAnchor.clone().sub(handWorldOffset);
+
+            // Calculate velocity (Position delta / dt) for fling physics
+            const moveDelta = targetBodyPos.clone().sub(this.userGroup.position);
+            const instVel = moveDelta.divideScalar(dt || 0.011);
+            
             if (!this.climbVelocity) this.climbVelocity = instVel;
             this.climbVelocity.lerp(instVel, 0.5);
 
-            this.userGroup.position.sub(delta);
+            this.userGroup.position.copy(targetBodyPos);
             
-            // Re-read world pos after moving player to ensure accurate lock
-            controller.getWorldPosition(this.previousHandPos);
+            // Zero physics
+            this.velocity.set(0,0,0);
+
+            // Movement controls disabled while climbing
             return; 
         }
 
