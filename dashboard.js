@@ -17,11 +17,39 @@ export class Dashboard {
         // Replay Data
         this.frames = [];
         this.recordingStartTime = 0;
+        
+        // Replay System
+        this.isReplaying = false;
+        this.replayStartTime = 0;
+        this.replayTarget = new THREE.WebGLRenderTarget(512, 288);
+        this.replayCamera = new THREE.PerspectiveCamera(60, 16/9, 0.1, 1000);
+        this.replayCamera.layers.set(0); // See World
+        this.replayCamera.layers.enable(2); // See Ghost
+        
+        // Ghost Player (Layer 2)
+        this.replayGroup = new THREE.Group();
+        this.scene.add(this.replayGroup);
+        
+        const ghostMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+        this.ghostHead = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), ghostMat);
+        this.ghostHead.layers.set(2);
+        this.ghostL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.15), ghostMat);
+        this.ghostL.layers.set(2);
+        this.ghostR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.15), ghostMat);
+        this.ghostR.layers.set(2);
+        this.replayGroup.add(this.ghostHead, this.ghostL, this.ghostR);
 
         this.setupUI();
     }
 
     setupUI() {
+        // Replay Screen
+        const screenGeo = new THREE.PlaneGeometry(0.3, 0.169);
+        const screenMat = new THREE.MeshBasicMaterial({ map: this.replayTarget.texture });
+        const screen = new THREE.Mesh(screenGeo, screenMat);
+        screen.position.set(0, 0.25, 0); // Above panel
+        this.group.add(screen);
+
         // Panel
         const panel = new THREE.Mesh(
             new THREE.BoxGeometry(0.3, 0.2, 0.02),
@@ -33,7 +61,7 @@ export class Dashboard {
         const btnGeo = new THREE.BoxGeometry(0.08, 0.04, 0.02);
         const btnMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
 
-        const labels = ["RECORD", "DASH", "MAP", "SETTINGS", "SOCIAL", "EXIT"];
+        const labels = ["RECORD", "SAVE", "MAP", "SETTINGS", "SOCIAL", "EXIT"];
 
         for (let i = 0; i < 6; i++) {
             const btn = new THREE.Mesh(btnGeo, btnMat.clone());
@@ -122,6 +150,47 @@ export class Dashboard {
             this.recordFrame(controllers);
         }
 
+        // Replay Rendering Logic
+        if (this.isReplaying && this.frames.length > 0) {
+            const time = (Date.now() - this.replayStartTime) % this.replayDuration;
+            
+            // Find frame
+            const frameIdx = Math.floor((time / this.replayDuration) * this.frames.length);
+            const frame = this.frames[Math.min(frameIdx, this.frames.length - 1)];
+
+            if (frame) {
+                const [hPos, hRot] = frame.h;
+                const [lPos, lRot] = frame.l;
+                const [rPos, rRot] = frame.r;
+
+                this.ghostHead.position.fromArray(hPos);
+                this.ghostHead.quaternion.fromArray(hRot);
+                this.ghostL.position.fromArray(lPos);
+                this.ghostL.quaternion.fromArray(lRot);
+                this.ghostR.position.fromArray(rPos);
+                this.ghostR.quaternion.fromArray(rRot);
+
+                // Camera Follow (Third Person behind recorded head)
+                const targetPos = new THREE.Vector3().fromArray(hPos);
+                const targetRot = new THREE.Quaternion().fromArray(hRot);
+                const offset = new THREE.Vector3(0, 0.5, 2.0).applyQuaternion(targetRot);
+                
+                this.replayCamera.position.copy(targetPos).add(offset);
+                this.replayCamera.lookAt(targetPos);
+
+                // Render to Texture
+                const currentXr = this.renderer.xr.enabled;
+                this.renderer.xr.enabled = false;
+                
+                const currentTarget = this.renderer.getRenderTarget();
+                this.renderer.setRenderTarget(this.replayTarget);
+                this.renderer.render(this.scene, this.replayCamera);
+                this.renderer.setRenderTarget(currentTarget);
+                
+                this.renderer.xr.enabled = currentXr;
+            }
+        }
+
         // Only allow interaction if fully visible and mostly expanded
         if (!this.group.visible || this.group.scale.x < 0.9) return;
 
@@ -188,6 +257,8 @@ export class Dashboard {
     onClick(id) {
         if (id === 0) {
             this.toggleRecording();
+        } else if (id === 1) {
+            this.saveReplay();
         }
     }
 
@@ -210,33 +281,42 @@ export class Dashboard {
     stopRecording() {
         if (!this.isRecording) return;
         this.isRecording = false;
+        
+        this.replayDuration = Date.now() - this.recordingStartTime;
+        this.replayStartTime = Date.now();
+        this.isReplaying = true;
 
-        // Create Replay JSON
+        this.updateBtn(0, "RECORD", '#cc0000');
+        this.updateBtn(1, "SAVE", '#00aa00');
+        console.log("Replay ready. Frames:", this.frames.length);
+    }
+
+    saveReplay() {
+        if (this.frames.length === 0) return;
+
         const replayData = {
             date: new Date().toISOString(),
-            duration: Date.now() - this.recordingStartTime,
+            duration: this.replayDuration,
             frames: this.frames
         };
 
-        try {
-            console.log("Replay captured. Frames:", this.frames.length);
-
-            // Exit VR to view the player (DOM overlay is not visible in VR)
-            const session = this.renderer.xr.getSession();
-            if (session) {
-                session.end();
-            }
-
-            // Dispatch event for React/Remotion to pick up
-            window.dispatchEvent(new CustomEvent('render-replay', { 
+        // Exit VR safely to allow browser download interactions
+        const session = this.renderer.xr.getSession();
+        if (session) {
+            session.end().then(() => {
+                setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('render-replay', { 
+                        detail: replayData 
+                    }));
+                }, 100);
+            });
+        } else {
+             window.dispatchEvent(new CustomEvent('render-replay', { 
                 detail: replayData 
             }));
-
-            this.updateBtn(0, "RECORD", '#cc0000');
-        } catch (e) {
-            console.error("Save error:", e);
-            this.updateBtn(0, "ERROR", '#cc0000');
         }
+        
+        this.updateBtn(1, "SAVED", '#555555');
     }
 
     updateBtn(id, text, colorHex) {

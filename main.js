@@ -9,6 +9,8 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x555555, 0.002);
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.layers.enable(0); // Default layer
+camera.layers.disable(2); // Layer 2 is for Replay Ghosts
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.xr.enabled = true;
