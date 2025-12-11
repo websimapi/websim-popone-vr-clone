@@ -10,7 +10,7 @@ export class World {
     }
 
     random() {
-        this.seed = (this.seed * 9301 + 49297) % 233280;
+        this.seed = (Math.floor(this.seed) * 9301 + 49297) % 233280;
         return this.seed / 233280;
     }
 

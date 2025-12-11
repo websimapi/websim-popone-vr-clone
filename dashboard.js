@@ -22,7 +22,7 @@ export class Dashboard {
         this.isReplaying = false;
         this.replayStartTime = 0;
         this.replayTarget = new THREE.WebGLRenderTarget(512, 288);
-        this.replayCamera = new THREE.PerspectiveCamera(60, 16/9, 0.1, 1000);
+        this.replayCamera = new THREE.PerspectiveCamera(70, 16/9, 0.1, 1000);
         this.replayCamera.layers.set(0); // See World
         this.replayCamera.layers.enable(2); // See Ghost
         
@@ -303,7 +303,9 @@ export class Dashboard {
         // Exit VR safely to allow browser download interactions
         const session = this.renderer.xr.getSession();
         if (session) {
-            session.end().then(() => {
+            session.end().catch((err) => {
+                console.warn("Session end warning:", err);
+            }).then(() => {
                 setTimeout(() => {
                     window.dispatchEvent(new CustomEvent('render-replay', { 
                         detail: replayData 

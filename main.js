@@ -144,7 +144,14 @@ renderer.setAnimationLoop(() => {
         player.update(dt);
     }
     
-    renderer.render(scene, camera);
+    try {
+        renderer.render(scene, camera);
+    } catch (e) {
+        // Ignore InvalidStateError from XR session ending
+        if (e.name !== 'InvalidStateError') {
+            console.error(e);
+        }
+    }
 });
 
 // Resize

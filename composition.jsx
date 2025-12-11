@@ -14,7 +14,7 @@ const ReplayComposition = ({ data }) => {
     if (threeRef.current) return;
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(5592405, 2e-3);
-    const camera = new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 1e3);
+    const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.1, 1e3);
     const renderer = new THREE.WebGLRenderer({
       canvas: canvasRef.current,
       antialias: true,
