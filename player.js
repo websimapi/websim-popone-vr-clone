@@ -82,29 +82,31 @@ export class Player {
     getHandCollision(handPos) {
         let totalEjection = new THREE.Vector3();
         let hitCount = 0;
+        const handRadius = 0.06; // 6cm visual radius
 
         for (let obj of this.world.colliders) {
-            // Transform point to local space of object for AABB check
-            // Simpler: Use Box3.setFromObject(obj) which gives World AABB.
             const box = new THREE.Box3().setFromObject(obj);
             
-            if (box.containsPoint(handPos)) {
-                // Find shallowest penetration
-                const min = box.min;
-                const max = box.max;
-                const p = handPos;
+            // Expand box bounds by hand radius for the check
+            const min = box.min.clone().subScalar(handRadius);
+            const max = box.max.clone().addScalar(handRadius);
 
-                const dx1 = p.x - min.x;
-                const dx2 = max.x - p.x;
-                const dy1 = p.y - min.y;
-                const dy2 = max.y - p.y;
-                const dz1 = p.z - min.z;
-                const dz2 = max.z - p.z;
+            if (handPos.x > min.x && handPos.x < max.x &&
+                handPos.y > min.y && handPos.y < max.y &&
+                handPos.z > min.z && handPos.z < max.z) {
+                
+                // Find shallowest penetration into the EXPANDED box
+                const dx1 = handPos.x - min.x;
+                const dx2 = max.x - handPos.x;
+                const dy1 = handPos.y - min.y;
+                const dy2 = max.y - handPos.y;
+                const dz1 = handPos.z - min.z;
+                const dz2 = max.z - handPos.z;
 
-                // Find min dimension
                 const minOverlap = Math.min(dx1, dx2, dy1, dy2, dz1, dz2);
                 
                 const ejection = new THREE.Vector3();
+                // Push away from the center of collision
                 if (Math.abs(minOverlap - dx1) < 0.001) ejection.x = -dx1;
                 else if (Math.abs(minOverlap - dx2) < 0.001) ejection.x = dx2;
                 else if (Math.abs(minOverlap - dy1) < 0.001) ejection.y = -dy1;
