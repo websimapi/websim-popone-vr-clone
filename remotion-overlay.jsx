@@ -6,20 +6,43 @@ import { ReplayComposition } from "./composition.jsx";
 const RemotionOverlay = () => {
   const [replayData, setReplayData] = useState(null);
   const [downloadUrl, setDownloadUrl] = useState(null);
+  const downloadUrlRef = useRef(null);
   const containerRef = useRef(null);
+  const [mimeType, setMimeType] = useState(null);
+  useEffect(() => {
+    downloadUrlRef.current = downloadUrl;
+  }, [downloadUrl]);
+  const triggerDownload = (url, type = "video/webm") => {
+    const ext = type.includes("mp4") ? "mp4" : "webm";
+    const filename = `skydrop-replay-${Date.now()}.${ext}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.target = "_blank";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    console.log("Triggered download for", url, filename);
+  };
   useEffect(() => {
     const handleReplay = (e) => {
       console.log("Received replay data", e.detail);
       setReplayData(e.detail);
       setDownloadUrl(null);
+      setMimeType(null);
     };
     const handleClose = () => {
       setReplayData(null);
       setDownloadUrl(null);
+      setMimeType(null);
     };
     const handleForceDownload = () => {
-      if (downloadUrl) {
-        triggerDownload(downloadUrl);
+      const currentUrl = downloadUrlRef.current;
+      console.log("Force download requested. URL:", currentUrl);
+      if (currentUrl) {
+        triggerDownload(currentUrl, mimeType || "video/webm");
+      } else {
+        console.warn("Cannot download: URL is null");
       }
     };
     window.addEventListener("render-replay", handleReplay);
@@ -30,18 +53,7 @@ const RemotionOverlay = () => {
       window.removeEventListener("close-replay", handleClose);
       window.removeEventListener("force-download", handleForceDownload);
     };
-  }, [downloadUrl]);
-  const triggerDownload = (url) => {
-    const filename = `skydrop-replay-${Date.now()}.webm`;
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.target = "_self";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    console.log("Triggered download for", url);
-  };
+  }, [mimeType]);
   useEffect(() => {
     if (!replayData || !containerRef.current) return;
     let recorder = null;
@@ -53,7 +65,6 @@ const RemotionOverlay = () => {
       if (started) return;
       const canvas = containerRef.current.querySelector("canvas");
       if (!canvas) {
-        console.warn("Remotion canvas not found yet, will retry.");
         return;
       }
       started = true;
@@ -68,23 +79,22 @@ const RemotionOverlay = () => {
           return;
         }
         const stream = captureFn.call(canvas, 30);
-        const mimeTypes = [
+        const types = [
+          "video/mp4",
           "video/webm;codecs=vp9",
           "video/webm;codecs=vp8",
-          "video/webm",
-          "video/mp4"
+          "video/webm"
         ];
-        let mimeType = "";
-        for (const type of mimeTypes) {
+        let selectedType = "";
+        for (const type of types) {
           if (MediaRecorder.isTypeSupported(type)) {
-            mimeType = type;
+            selectedType = type;
             break;
           }
         }
-        const options = {};
-        if (mimeType) {
-          options.mimeType = mimeType;
-        }
+        if (!selectedType) selectedType = "video/webm";
+        setMimeType(selectedType);
+        const options = { mimeType: selectedType };
         options.videoBitsPerSecond = 8e6;
         recorder = new MediaRecorder(stream, options);
         const chunks = [];
@@ -103,9 +113,8 @@ const RemotionOverlay = () => {
             window.dispatchEvent(new CustomEvent("render-complete"));
             return;
           }
-          const blobType = mimeType || "video/webm";
-          const blob = new Blob(chunks, { type: blobType });
-          console.log(`Recording complete. Size: ${blob.size} bytes, type: ${blobType}`);
+          const blob = new Blob(chunks, { type: selectedType });
+          console.log(`Recording complete. Size: ${blob.size} bytes, type: ${selectedType}`);
           if (!blob.size) {
             console.error("Recording failed: Blob size is 0.");
             window.dispatchEvent(new CustomEvent("render-complete"));
@@ -113,7 +122,7 @@ const RemotionOverlay = () => {
           }
           const url = URL.createObjectURL(blob);
           setDownloadUrl(url);
-          triggerDownload(url);
+          triggerDownload(url, selectedType);
           window.dispatchEvent(new CustomEvent("render-complete", { detail: { url } }));
         };
         recorder.onerror = (err) => {
@@ -122,16 +131,9 @@ const RemotionOverlay = () => {
             clearInterval(progressTimer);
             progressTimer = null;
           }
-          if (recorder && recorder.state !== "inactive") {
-            try {
-              recorder.requestData();
-            } catch (e) {
-              console.warn("requestData failed after error", e);
-            }
-          }
           window.dispatchEvent(new CustomEvent("render-complete"));
         };
-        recorder.start(200);
+        recorder.start(100);
         const startTime = performance.now();
         progressTimer = setInterval(() => {
           const elapsed = performance.now() - startTime;
@@ -142,11 +144,6 @@ const RemotionOverlay = () => {
         }, 200);
         recordingTimer = setTimeout(() => {
           if (recorder && recorder.state === "recording") {
-            try {
-              recorder.requestData();
-            } catch (e) {
-              console.warn("requestData failed before stop", e);
-            }
             recorder.stop();
           }
         }, totalDurationMs);
@@ -184,37 +181,86 @@ const RemotionOverlay = () => {
     width: "1280px",
     height: "720px",
     pointerEvents: "none",
+    // Allow clicks to pass through except for button
     visibility: "visible",
-    // Must be visible for paint
-    opacity: 0.05,
-    // Almost invisible but painted
-    zIndex: 9999,
-    // On top of everything to avoid occlusion
-    background: "#000"
-  }, children: /* @__PURE__ */ jsxDEV(
-    Player,
-    {
-      component: ReplayComposition,
-      durationInFrames,
-      fps,
-      compositionWidth: 1280,
-      compositionHeight: 720,
-      inputProps: { data: replayData },
-      controls: false,
-      autoplay: true,
-      loop: true,
-      style: { width: "100%", height: "100%" }
-    },
-    void 0,
-    false,
-    {
+    zIndex: 9999
+  }, children: [
+    /* @__PURE__ */ jsxDEV("div", { style: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: "100%",
+      background: "#000",
+      opacity: 0.01,
+      zIndex: -1
+    } }, void 0, false, {
       fileName: "<stdin>",
       lineNumber: 245,
       columnNumber: 13
-    }
-  ) }, void 0, false, {
+    }),
+    /* @__PURE__ */ jsxDEV(
+      Player,
+      {
+        component: ReplayComposition,
+        durationInFrames,
+        fps,
+        compositionWidth: 1280,
+        compositionHeight: 720,
+        inputProps: { data: replayData },
+        controls: false,
+        autoplay: true,
+        loop: true,
+        style: { width: "100%", height: "100%" }
+      },
+      void 0,
+      false,
+      {
+        fileName: "<stdin>",
+        lineNumber: 250,
+        columnNumber: 13
+      }
+    ),
+    downloadUrl && /* @__PURE__ */ jsxDEV("div", { style: {
+      position: "fixed",
+      bottom: "20%",
+      left: "50%",
+      transform: "translateX(-50%)",
+      pointerEvents: "auto",
+      // Enable interaction
+      zIndex: 1e4
+    }, children: /* @__PURE__ */ jsxDEV(
+      "button",
+      {
+        onClick: () => triggerDownload(downloadUrl, mimeType),
+        style: {
+          padding: "20px 40px",
+          fontSize: "24px",
+          fontWeight: "bold",
+          color: "white",
+          background: "#00cc00",
+          border: "4px solid white",
+          borderRadius: "10px",
+          cursor: "pointer",
+          boxShadow: "0 0 20px rgba(0,0,0,0.5)"
+        },
+        children: "SAVE VIDEO TO DEVICE"
+      },
+      void 0,
+      false,
+      {
+        fileName: "<stdin>",
+        lineNumber: 273,
+        columnNumber: 21
+      }
+    ) }, void 0, false, {
+      fileName: "<stdin>",
+      lineNumber: 265,
+      columnNumber: 17
+    })
+  ] }, void 0, true, {
     fileName: "<stdin>",
-    lineNumber: 233,
+    lineNumber: 234,
     columnNumber: 9
   });
 };
@@ -222,7 +268,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 263,
+    lineNumber: 297,
     columnNumber: 29
   }));
 }
