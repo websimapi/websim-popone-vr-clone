@@ -210,6 +210,7 @@ const ReplayComposition = ({ data }) => {
       "canvas",
       {
         ref: canvasRef,
+        "data-replay-canvas": "1",
         style: { width: "100%", height: "100%" }
       },
       void 0,
@@ -222,7 +223,7 @@ const ReplayComposition = ({ data }) => {
     ),
     !data && /* @__PURE__ */ jsxDEV("div", { style: { position: "absolute", top: 10, left: 10, color: "red" }, children: "NO DATA" }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 268,
+      lineNumber: 269,
       columnNumber: 23
     })
   ] }, void 0, true, {

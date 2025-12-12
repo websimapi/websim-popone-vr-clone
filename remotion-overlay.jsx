@@ -65,7 +65,7 @@ const RemotionOverlay = () => {
     const totalDurationMs = (typeof replayData.duration === "number" ? replayData.duration : 0) + 1e3;
     const startRecording = () => {
       if (started) return;
-      const canvas = containerRef.current.querySelector("canvas");
+      const canvas = containerRef.current.querySelector('canvas[data-replay-canvas="1"]');
       if (!canvas) {
         console.log("Waiting for canvas...");
         return;
@@ -205,7 +205,7 @@ const RemotionOverlay = () => {
         clearInterval(fallbackInterval);
         return;
       }
-      const canvas = containerRef.current?.querySelector("canvas");
+      const canvas = containerRef.current?.querySelector('canvas[data-replay-canvas="1"]');
       if (canvas) {
         console.log("Fallback triggering startRecording (canvas found)");
         startRecording();
