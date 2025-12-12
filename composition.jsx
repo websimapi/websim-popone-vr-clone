@@ -5,7 +5,8 @@ import {
   useCurrentFrame,
   useVideoConfig,
   delayRender,
-  continueRender
+  continueRender,
+  random
 } from "remotion";
 import * as THREE from "three";
 const ReplayComposition = ({ data }) => {
@@ -15,8 +16,12 @@ const ReplayComposition = ({ data }) => {
   const [handle] = useState(() => delayRender());
   const threeRef = useRef(null);
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current) {
+      console.error("ReplayComposition: Canvas ref is null during setup!");
+      return;
+    }
     if (threeRef.current) return;
+    console.log("ReplayComposition: Initializing Three.js scene");
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(5592405, 2e-3);
     scene.background = new THREE.Color(328965);
@@ -105,6 +110,12 @@ const ReplayComposition = ({ data }) => {
       color: 65280,
       wireframe: true
     });
+    const debugCube = new THREE.Mesh(
+      new THREE.BoxGeometry(10, 10, 10),
+      new THREE.MeshBasicMaterial({ color: 16711680, wireframe: true })
+    );
+    debugCube.position.set(0, 310, 0);
+    scene.add(debugCube);
     const head = new THREE.Mesh(
       new THREE.BoxGeometry(0.25, 0.25, 0.25),
       ghostMat
@@ -124,15 +135,27 @@ const ReplayComposition = ({ data }) => {
       renderer,
       head,
       lHand,
-      rHand
+      rHand,
+      debugCube
     };
-    threeRef.current.renderer.render(threeRef.current.scene, threeRef.current.camera);
+    try {
+      threeRef.current.renderer.render(threeRef.current.scene, threeRef.current.camera);
+      console.log("ReplayComposition: Initial render successful");
+    } catch (e) {
+      console.error("ReplayComposition: Initial render failed", e);
+    }
     continueRender(handle);
     window.dispatchEvent(new CustomEvent("remotion-ready"));
   }, [canvasRef, handle]);
   useEffect(() => {
-    if (!threeRef.current) return;
-    const { scene, camera, renderer, head, lHand, rHand } = threeRef.current;
+    if (!threeRef.current) {
+      return;
+    }
+    const { scene, camera, renderer, head, lHand, rHand, debugCube } = threeRef.current;
+    if (debugCube) {
+      debugCube.rotation.x = frame * 0.1;
+      debugCube.rotation.y = frame * 0.15;
+    }
     if (!data || !data.frames || data.frames.length === 0) {
       renderer.render(scene, camera);
       return;
@@ -174,22 +197,29 @@ const ReplayComposition = ({ data }) => {
     }
     renderer.render(scene, camera);
   }, [frame, data, fps]);
-  return /* @__PURE__ */ jsxDEV(AbsoluteFill, { children: /* @__PURE__ */ jsxDEV(
-    "canvas",
-    {
-      ref: canvasRef,
-      style: { width: "100%", height: "100%" }
-    },
-    void 0,
-    false,
-    {
+  return /* @__PURE__ */ jsxDEV(AbsoluteFill, { children: [
+    /* @__PURE__ */ jsxDEV(
+      "canvas",
+      {
+        ref: canvasRef,
+        style: { width: "100%", height: "100%" }
+      },
+      void 0,
+      false,
+      {
+        fileName: "<stdin>",
+        lineNumber: 255,
+        columnNumber: 13
+      }
+    ),
+    !data && /* @__PURE__ */ jsxDEV("div", { style: { position: "absolute", top: 10, left: 10, color: "red" }, children: "NO DATA" }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 227,
-      columnNumber: 13
-    }
-  ) }, void 0, false, {
+      lineNumber: 259,
+      columnNumber: 23
+    })
+  ] }, void 0, true, {
     fileName: "<stdin>",
-    lineNumber: 226,
+    lineNumber: 254,
     columnNumber: 9
   });
 };

@@ -62,15 +62,21 @@ const RemotionOverlay = () => {
     let recordingTimer = null;
     let progressTimer = null;
     let started = false;
-    const totalDurationMs = (typeof replayData.duration === "number" ? replayData.duration : 0) + 500;
+    const totalDurationMs = (typeof replayData.duration === "number" ? replayData.duration : 0) + 1e3;
     const startRecording = () => {
       if (started) return;
       const canvas = containerRef.current.querySelector("canvas");
       if (!canvas) {
+        console.log("Waiting for canvas...");
+        return;
+      }
+      if (canvas.width === 0 || canvas.height === 0) {
+        console.warn("Canvas has 0 dimensions");
         return;
       }
       started = true;
       setRendering(true);
+      console.log("Starting capture on canvas:", canvas);
       setTimeout(() => {
         try {
           const captureFn = canvas.captureStream || canvas.mozCaptureStream;
@@ -81,8 +87,8 @@ const RemotionOverlay = () => {
           }
           const stream = captureFn.call(canvas, 30);
           const mimeTypes = [
-            "video/webm;codecs=vp8",
             "video/webm;codecs=vp9",
+            "video/webm;codecs=vp8",
             "video/webm",
             "video/mp4"
           ];
@@ -114,7 +120,6 @@ const RemotionOverlay = () => {
           recorder.ondataavailable = (e) => {
             if (e.data && e.data.size > 0) {
               chunks.push(e.data);
-              console.log(`Captured chunk: ${e.data.size} bytes`);
             }
           };
           recorder.onstart = () => {
@@ -161,8 +166,8 @@ const RemotionOverlay = () => {
             }));
           };
           try {
-            recorder.start();
-            console.log("Recorder started (no timeslice)");
+            recorder.start(200);
+            console.log("Recorder started (200ms timeslice)");
           } catch (e) {
             throw new Error("MediaRecorder start failed: " + e.message);
           }
@@ -188,9 +193,10 @@ const RemotionOverlay = () => {
             detail: { success: false, error: msg }
           }));
         }
-      }, 500);
+      }, 1e3);
     };
     const handleReady = () => {
+      console.log("Remotion ready event received.");
       setTimeout(startRecording, 500);
     };
     window.addEventListener("remotion-ready", handleReady);
@@ -199,7 +205,11 @@ const RemotionOverlay = () => {
         clearInterval(fallbackInterval);
         return;
       }
-      startRecording();
+      const canvas = containerRef.current?.querySelector("canvas");
+      if (canvas) {
+        console.log("Fallback triggering startRecording (canvas found)");
+        startRecording();
+      }
     }, 1e3);
     return () => {
       window.removeEventListener("remotion-ready", handleReady);
@@ -243,7 +253,7 @@ const RemotionOverlay = () => {
       "%"
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 296,
+      lineNumber: 311,
       columnNumber: 17
     }),
     /* @__PURE__ */ jsxDEV("div", { style: {
@@ -273,12 +283,12 @@ const RemotionOverlay = () => {
       false,
       {
         fileName: "<stdin>",
-        lineNumber: 323,
+        lineNumber: 338,
         columnNumber: 17
       }
     ) }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 314,
+      lineNumber: 329,
       columnNumber: 13
     }),
     downloadUrl && !rendering && /* @__PURE__ */ jsxDEV("div", { style: {
@@ -303,7 +313,7 @@ const RemotionOverlay = () => {
     }, children: [
       /* @__PURE__ */ jsxDEV("h2", { style: { color: "white", marginBottom: "30px" }, children: "REPLAY READY" }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 356,
+        lineNumber: 371,
         columnNumber: 25
       }),
       /* @__PURE__ */ jsxDEV(
@@ -328,13 +338,13 @@ const RemotionOverlay = () => {
         false,
         {
           fileName: "<stdin>",
-          lineNumber: 357,
+          lineNumber: 372,
           columnNumber: 25
         }
       ),
       /* @__PURE__ */ jsxDEV("br", {}, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 374,
+        lineNumber: 389,
         columnNumber: 25
       }),
       /* @__PURE__ */ jsxDEV(
@@ -357,22 +367,22 @@ const RemotionOverlay = () => {
         false,
         {
           fileName: "<stdin>",
-          lineNumber: 375,
+          lineNumber: 390,
           columnNumber: 25
         }
       )
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 349,
+      lineNumber: 364,
       columnNumber: 21
     }) }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 339,
+      lineNumber: 354,
       columnNumber: 17
     })
   ] }, void 0, true, {
     fileName: "<stdin>",
-    lineNumber: 275,
+    lineNumber: 290,
     columnNumber: 9
   });
 };
@@ -380,7 +390,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 399,
+    lineNumber: 414,
     columnNumber: 29
   }));
 }

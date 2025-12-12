@@ -370,9 +370,19 @@ export class Dashboard {
         // Stop internal replay loop to save performance and switch to external view
         this.isReplaying = false;
 
+        console.log("Preparing replay data...");
         // Ensure clean data structure - deep clone to avoid any proxy/reference issues
         let framesClean;
         try {
+            // Validate first frame structure
+            if (this.frames[0]) {
+                 const f = this.frames[0];
+                 if (!f.h || !f.l || !f.r) {
+                     console.error("Invalid frame structure detected:", f);
+                     this.updateBtn(1, "BAD DATA", '#cc0000');
+                     return;
+                 }
+            }
             framesClean = JSON.parse(JSON.stringify(this.frames));
         } catch (e) {
             console.error("Failed to serialize replay frames", e);

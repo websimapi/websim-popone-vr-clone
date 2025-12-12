@@ -10,7 +10,7 @@ getHandCollision(handPos) {
 
     for (let obj of this.world.colliders) {
         // Ensure bounds are up to date
-        if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
+        if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox(); // Double check
 
         // Transform point to local space of object for AABB check
         // (Assuming non-rotated or only y-rotated boxes for simplicity, 
