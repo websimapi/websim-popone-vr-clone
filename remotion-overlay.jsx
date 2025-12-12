@@ -109,7 +109,7 @@ const RemotionOverlay = () => {
           }
           window.dispatchEvent(new CustomEvent("render-complete"));
         };
-        recorder.start(100);
+        recorder.start();
         const startTime = performance.now();
         progressTimer = setInterval(() => {
           const elapsed = performance.now() - startTime;
