@@ -49,6 +49,15 @@ export class Dashboard {
             }
         });
 
+        // Progress updates from Remotion recording
+        window.addEventListener('render-progress', (e) => {
+            if (!this.buttons[1]) return;
+            const progress = Math.max(0, Math.min(1, e.detail?.progress ?? 0));
+            const pct = Math.round(progress * 100);
+            const label = pct >= 100 ? "FINALIZING..." : `RENDERING ${pct}%`;
+            this.updateBtn(1, label, '#555555');
+        });
+
         this.setupUI();
     }
 
