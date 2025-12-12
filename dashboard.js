@@ -22,6 +22,7 @@ export class Dashboard {
         this.isReplaying = false;
         this.replayStartTime = 0;
         this.isDownloadReady = false; // New flag
+        this.lastError = null; // Store last error for clipboard
         this.replayTarget = new THREE.WebGLRenderTarget(512, 288);
         this.replayCamera = new THREE.PerspectiveCamera(70, 16/9, 0.1, 1000);
         this.replayCamera.layers.set(0); // See World
@@ -44,6 +45,12 @@ export class Dashboard {
         window.addEventListener('render-complete', (e) => {
             this.isDownloadReady = true;
             const success = e.detail && e.detail.success;
+            
+            if (!success) {
+                this.lastError = e.detail && e.detail.error ? e.detail.error : "Unknown Error";
+                console.error("CAPTURE ERROR:", this.lastError);
+            }
+
             if (this.buttons[1]) {
                 this.updateBtn(1, success ? "DONE" : "ERROR", success ? '#00aa00' : '#cc0000');
             }
@@ -111,6 +118,7 @@ export class Dashboard {
                 id: i,
                 labelCtx: ctx,
                 labelTex: tex,
+                labelText: labels[i],
                 isHovered: false
             };
             if (i === 0) btn.material.color.setHex(0xcc0000); // Red for record
@@ -282,6 +290,31 @@ export class Dashboard {
         if (id === 0) {
             this.toggleRecording();
         } else if (id === 1) {
+            const btn = this.buttons[1];
+            
+            // Error Handling: Click to copy
+            if (btn.userData.labelText === "ERROR") {
+                const errText = this.lastError || "Unknown Error";
+                console.log("Copying error to clipboard:", errText);
+                
+                // Attempt clipboard copy
+                navigator.clipboard.writeText(errText).then(() => {
+                    this.updateBtn(1, "COPIED", '#00aa00');
+                }).catch(e => {
+                    console.error("Clipboard copy failed", e);
+                    this.updateBtn(1, "CPY FAIL", '#cc0000');
+                }).finally(() => {
+                    // Reset after delay
+                    setTimeout(() => {
+                        // Only reset if it's still showing the status message
+                        if (this.buttons[1].userData.labelText === "COPIED" || this.buttons[1].userData.labelText === "CPY FAIL") {
+                            this.updateBtn(1, "ERROR", '#cc0000');
+                        }
+                    }, 2000);
+                });
+                return;
+            }
+
             if (this.isDownloadReady) {
                 // Already rendered, user wants to download again?
                 // Just trigger the overlay again by re-emitting? 
@@ -380,6 +413,7 @@ export class Dashboard {
 
     updateBtn(id, text, colorHex) {
         const btn = this.buttons[id];
+        btn.userData.labelText = text;
         if (colorHex) btn.material.color.set(colorHex);
         const ctx = btn.userData.labelCtx;
         this.drawLabel(ctx, text, colorHex);

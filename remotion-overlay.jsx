@@ -101,15 +101,21 @@ const RemotionOverlay = () => {
               progressTimer = null;
             }
             if (!chunks.length) {
-              console.error("Recording failed: No data chunks captured.");
-              window.dispatchEvent(new CustomEvent("render-complete", { detail: { success: false } }));
+              const msg = "Recording failed: No data chunks captured.";
+              console.error(msg);
+              window.dispatchEvent(new CustomEvent("render-complete", {
+                detail: { success: false, error: msg }
+              }));
               return;
             }
             const blob = new Blob(chunks, { type: "video/webm" });
             console.log(`Recording complete. Size: ${blob.size} bytes`);
             if (!blob.size) {
-              console.error("Recording failed: Blob size is 0.");
-              window.dispatchEvent(new CustomEvent("render-complete", { detail: { success: false } }));
+              const msg = "Recording failed: Blob size is 0.";
+              console.error(msg);
+              window.dispatchEvent(new CustomEvent("render-complete", {
+                detail: { success: false, error: msg }
+              }));
               return;
             }
             const url = URL.createObjectURL(blob);
@@ -117,11 +123,18 @@ const RemotionOverlay = () => {
             window.dispatchEvent(new CustomEvent("render-complete", { detail: { url, success: true } }));
           };
           recorder.onerror = (err) => {
-            console.error("MediaRecorder error", err);
+            const msg = "MediaRecorder error: " + (err.error?.message || err.message || JSON.stringify(err));
+            console.error(msg, err);
             setRendering(false);
-            window.dispatchEvent(new CustomEvent("render-complete", { detail: { success: false } }));
+            window.dispatchEvent(new CustomEvent("render-complete", {
+              detail: { success: false, error: msg }
+            }));
           };
-          recorder.start(100);
+          try {
+            recorder.start(100);
+          } catch (e) {
+            throw new Error("MediaRecorder start failed: " + e.message);
+          }
           const startTime = performance.now();
           progressTimer = setInterval(() => {
             const elapsed = performance.now() - startTime;
@@ -137,9 +150,12 @@ const RemotionOverlay = () => {
             }
           }, totalDurationMs);
         } catch (e) {
-          console.error("Recording error", e);
+          const msg = "Recording process error: " + (e.message || e.toString());
+          console.error(msg, e);
           setRendering(false);
-          window.dispatchEvent(new CustomEvent("render-complete", { detail: { success: false } }));
+          window.dispatchEvent(new CustomEvent("render-complete", {
+            detail: { success: false, error: msg }
+          }));
         }
       }, 500);
     };
@@ -196,7 +212,7 @@ const RemotionOverlay = () => {
       "%"
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 242,
+      lineNumber: 258,
       columnNumber: 17
     }),
     /* @__PURE__ */ jsxDEV("div", { style: {
@@ -226,12 +242,12 @@ const RemotionOverlay = () => {
       false,
       {
         fileName: "<stdin>",
-        lineNumber: 269,
+        lineNumber: 285,
         columnNumber: 17
       }
     ) }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 260,
+      lineNumber: 276,
       columnNumber: 13
     }),
     downloadUrl && !rendering && /* @__PURE__ */ jsxDEV("div", { style: {
@@ -256,7 +272,7 @@ const RemotionOverlay = () => {
     }, children: [
       /* @__PURE__ */ jsxDEV("h2", { style: { color: "white", marginBottom: "30px" }, children: "REPLAY READY" }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 302,
+        lineNumber: 318,
         columnNumber: 25
       }),
       /* @__PURE__ */ jsxDEV(
@@ -281,13 +297,13 @@ const RemotionOverlay = () => {
         false,
         {
           fileName: "<stdin>",
-          lineNumber: 303,
+          lineNumber: 319,
           columnNumber: 25
         }
       ),
       /* @__PURE__ */ jsxDEV("br", {}, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 320,
+        lineNumber: 336,
         columnNumber: 25
       }),
       /* @__PURE__ */ jsxDEV(
@@ -310,22 +326,22 @@ const RemotionOverlay = () => {
         false,
         {
           fileName: "<stdin>",
-          lineNumber: 321,
+          lineNumber: 337,
           columnNumber: 25
         }
       )
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 295,
+      lineNumber: 311,
       columnNumber: 21
     }) }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 285,
+      lineNumber: 301,
       columnNumber: 17
     })
   ] }, void 0, true, {
     fileName: "<stdin>",
-    lineNumber: 221,
+    lineNumber: 237,
     columnNumber: 9
   });
 };
@@ -333,7 +349,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 345,
+    lineNumber: 361,
     columnNumber: 29
   }));
 }
