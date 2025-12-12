@@ -91,16 +91,33 @@ const RemotionOverlay = () => {
             window.dispatchEvent(new CustomEvent("render-complete"));
             return;
           }
-          const url = URL.createObjectURL(blob);
           const isMp4 = blobType.includes("mp4");
           const ext = isMp4 ? "mp4" : "webm";
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `skydrop-replay-${Date.now()}.${ext}`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+          const filename = `skydrop-replay-${Date.now()}.${ext}`;
+          const url = URL.createObjectURL(blob);
+          console.log("Attempting download", { filename, blobType, size: blob.size });
+          try {
+            const newWin = window.open(url, "_blank");
+            if (!newWin) {
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = filename;
+              a.target = "_blank";
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            }
+          } catch (err) {
+            console.error("Download via window.open/anchor failed, falling back to location.replace", err);
+            try {
+              window.location.href = url;
+            } catch (err2) {
+              console.error("Final download fallback failed", err2);
+            }
+          }
+          setTimeout(() => {
+            URL.revokeObjectURL(url);
+          }, 1e4);
           window.dispatchEvent(new CustomEvent("render-complete"));
         };
         recorder.onerror = (err) => {
@@ -108,6 +125,13 @@ const RemotionOverlay = () => {
           if (progressTimer) {
             clearInterval(progressTimer);
             progressTimer = null;
+          }
+          if (recorder && recorder.state !== "inactive") {
+            try {
+              recorder.requestData();
+            } catch (e) {
+              console.warn("requestData failed after error", e);
+            }
           }
           window.dispatchEvent(new CustomEvent("render-complete"));
         };
@@ -122,6 +146,11 @@ const RemotionOverlay = () => {
         }, 200);
         recordingTimer = setTimeout(() => {
           if (recorder && recorder.state === "recording") {
+            try {
+              recorder.requestData();
+            } catch (e) {
+              console.warn("requestData failed before stop", e);
+            }
             recorder.stop();
           }
         }, totalDurationMs);
@@ -184,12 +213,12 @@ const RemotionOverlay = () => {
     false,
     {
       fileName: "<stdin>",
-      lineNumber: 213,
+      lineNumber: 251,
       columnNumber: 13
     }
   ) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 201,
+    lineNumber: 239,
     columnNumber: 9
   });
 };
@@ -197,7 +226,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 231,
+    lineNumber: 269,
     columnNumber: 29
   }));
 }
