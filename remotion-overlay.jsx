@@ -1,5 +1,5 @@
 import { jsxDEV } from "react/jsx-dev-runtime";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import { Player } from "@websim/remotion/player";
 import { ReplayComposition } from "./composition.jsx";
@@ -222,6 +222,42 @@ const RemotionOverlay = () => {
   if (!replayData) return null;
   const fps = 30;
   const durationInFrames = Math.max(1, Math.ceil(replayData.duration / 1e3 * fps));
+  const inputProps = useMemo(() => ({ data: replayData }), [replayData]);
+  const playerComponent = useMemo(() => /* @__PURE__ */ jsxDEV("div", { style: {
+    width: "640px",
+    height: "360px",
+    border: "2px solid #333",
+    background: "#000",
+    position: "relative",
+    boxShadow: "0 0 50px rgba(0,0,0,0.8)",
+    zIndex: 1e4
+    // Ensure it is on top so browser paints it
+  }, children: /* @__PURE__ */ jsxDEV(
+    Player,
+    {
+      component: ReplayComposition,
+      durationInFrames,
+      fps,
+      compositionWidth: 1280,
+      compositionHeight: 720,
+      inputProps,
+      controls: false,
+      autoplay: true,
+      loop: true,
+      style: { width: "100%", height: "100%" }
+    },
+    void 0,
+    false,
+    {
+      fileName: "<stdin>",
+      lineNumber: 304,
+      columnNumber: 13
+    }
+  ) }, void 0, false, {
+    fileName: "<stdin>",
+    lineNumber: 295,
+    columnNumber: 9
+  }), [durationInFrames, inputProps, fps]);
   return /* @__PURE__ */ jsxDEV("div", { ref: containerRef, style: {
     position: "absolute",
     top: 0,
@@ -253,44 +289,10 @@ const RemotionOverlay = () => {
       "%"
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 311,
+      lineNumber: 341,
       columnNumber: 17
     }),
-    /* @__PURE__ */ jsxDEV("div", { style: {
-      width: "640px",
-      height: "360px",
-      border: "2px solid #333",
-      background: "#000",
-      position: "relative",
-      boxShadow: "0 0 50px rgba(0,0,0,0.8)",
-      zIndex: 1e4
-      // Ensure it is on top so browser paints it
-    }, children: /* @__PURE__ */ jsxDEV(
-      Player,
-      {
-        component: ReplayComposition,
-        durationInFrames,
-        fps,
-        compositionWidth: 1280,
-        compositionHeight: 720,
-        inputProps: { data: replayData },
-        controls: false,
-        autoplay: true,
-        loop: true,
-        style: { width: "100%", height: "100%" }
-      },
-      void 0,
-      false,
-      {
-        fileName: "<stdin>",
-        lineNumber: 338,
-        columnNumber: 17
-      }
-    ) }, void 0, false, {
-      fileName: "<stdin>",
-      lineNumber: 329,
-      columnNumber: 13
-    }),
+    playerComponent,
     downloadUrl && !rendering && /* @__PURE__ */ jsxDEV("div", { style: {
       position: "absolute",
       top: 0,
@@ -313,7 +315,7 @@ const RemotionOverlay = () => {
     }, children: [
       /* @__PURE__ */ jsxDEV("h2", { style: { color: "white", marginBottom: "30px" }, children: "REPLAY READY" }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 371,
+        lineNumber: 380,
         columnNumber: 25
       }),
       /* @__PURE__ */ jsxDEV(
@@ -338,13 +340,13 @@ const RemotionOverlay = () => {
         false,
         {
           fileName: "<stdin>",
-          lineNumber: 372,
+          lineNumber: 381,
           columnNumber: 25
         }
       ),
       /* @__PURE__ */ jsxDEV("br", {}, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 389,
+        lineNumber: 398,
         columnNumber: 25
       }),
       /* @__PURE__ */ jsxDEV(
@@ -367,22 +369,22 @@ const RemotionOverlay = () => {
         false,
         {
           fileName: "<stdin>",
-          lineNumber: 390,
+          lineNumber: 399,
           columnNumber: 25
         }
       )
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 364,
+      lineNumber: 373,
       columnNumber: 21
     }) }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 354,
+      lineNumber: 363,
       columnNumber: 17
     })
   ] }, void 0, true, {
     fileName: "<stdin>",
-    lineNumber: 290,
+    lineNumber: 320,
     columnNumber: 9
   });
 };
@@ -390,7 +392,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 414,
+    lineNumber: 423,
     columnNumber: 29
   }));
 }
