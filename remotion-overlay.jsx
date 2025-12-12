@@ -219,9 +219,9 @@ const RemotionOverlay = () => {
       if (recorder && recorder.state === "recording") recorder.stop();
     };
   }, [replayData]);
-  if (!replayData) return null;
   const fps = 30;
-  const durationInFrames = Math.max(1, Math.ceil(replayData.duration / 1e3 * fps));
+  const duration = replayData ? replayData.duration : 0;
+  const durationInFrames = Math.max(1, Math.ceil(duration / 1e3 * fps));
   const inputProps = useMemo(() => ({ data: replayData }), [replayData]);
   const playerComponent = useMemo(() => /* @__PURE__ */ jsxDEV("div", { style: {
     width: "640px",
@@ -258,6 +258,7 @@ const RemotionOverlay = () => {
     lineNumber: 295,
     columnNumber: 9
   }), [durationInFrames, inputProps, fps]);
+  if (!replayData) return null;
   return /* @__PURE__ */ jsxDEV("div", { ref: containerRef, style: {
     position: "absolute",
     top: 0,
@@ -289,7 +290,7 @@ const RemotionOverlay = () => {
       "%"
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 341,
+      lineNumber: 343,
       columnNumber: 17
     }),
     playerComponent,
@@ -315,7 +316,7 @@ const RemotionOverlay = () => {
     }, children: [
       /* @__PURE__ */ jsxDEV("h2", { style: { color: "white", marginBottom: "30px" }, children: "REPLAY READY" }, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 380,
+        lineNumber: 382,
         columnNumber: 25
       }),
       /* @__PURE__ */ jsxDEV(
@@ -340,13 +341,13 @@ const RemotionOverlay = () => {
         false,
         {
           fileName: "<stdin>",
-          lineNumber: 381,
+          lineNumber: 383,
           columnNumber: 25
         }
       ),
       /* @__PURE__ */ jsxDEV("br", {}, void 0, false, {
         fileName: "<stdin>",
-        lineNumber: 398,
+        lineNumber: 400,
         columnNumber: 25
       }),
       /* @__PURE__ */ jsxDEV(
@@ -369,22 +370,22 @@ const RemotionOverlay = () => {
         false,
         {
           fileName: "<stdin>",
-          lineNumber: 399,
+          lineNumber: 401,
           columnNumber: 25
         }
       )
     ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 373,
+      lineNumber: 375,
       columnNumber: 21
     }) }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 363,
+      lineNumber: 365,
       columnNumber: 17
     })
   ] }, void 0, true, {
     fileName: "<stdin>",
-    lineNumber: 320,
+    lineNumber: 322,
     columnNumber: 9
   });
 };
@@ -392,7 +393,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 423,
+    lineNumber: 425,
     columnNumber: 29
   }));
 }
