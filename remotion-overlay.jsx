@@ -26,9 +26,12 @@ const RemotionOverlay = () => {
     let recorder = null;
     let recordingTimer = null;
     let interval = null;
+    let started = false;
     const startRecording = () => {
+      if (started) return;
       const canvas = containerRef.current.querySelector("canvas");
       if (!canvas) return;
+      started = true;
       if (window.player && window.player.dashboard) {
         window.player.dashboard.setExternalSource(canvas);
       }
@@ -59,6 +62,10 @@ const RemotionOverlay = () => {
           videoBitsPerSecond: 8e6
         });
         const chunks = [];
+        recorder.onerror = (e) => {
+          console.error("Recorder error:", e);
+          window.dispatchEvent(new CustomEvent("render-complete"));
+        };
         recorder.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) {
             chunks.push(e.data);
@@ -96,13 +103,16 @@ const RemotionOverlay = () => {
     };
     const handleReady = () => {
       setTimeout(() => {
-        if (recorder) return;
         startRecording();
-      }, 100);
+      }, 500);
     };
     window.addEventListener("remotion-ready", handleReady);
     interval = setInterval(() => {
       const canvas = containerRef.current.querySelector("canvas");
+      if (canvas && !started) {
+        console.log("Fallback start trigger");
+        startRecording();
+      }
     }, 1e3);
     return () => {
       window.removeEventListener("remotion-ready", handleReady);
@@ -121,13 +131,11 @@ const RemotionOverlay = () => {
     width: "1280px",
     height: "720px",
     pointerEvents: "none",
-    visibility: "visible",
-    opacity: 1,
-    // Must be visible for browser to paint canvas
-    zIndex: -9999,
-    // Behind everything
+    // Opacity 0 makes it invisible to user but "visible" to browser compositor, preventing culling/throttling
+    opacity: 0,
+    zIndex: 20,
+    // On top of game to ensure painting priority
     background: "#000"
-    // Ensure background exists
   }, children: /* @__PURE__ */ jsxDEV(
     Player,
     {
@@ -146,12 +154,12 @@ const RemotionOverlay = () => {
     false,
     {
       fileName: "<stdin>",
-      lineNumber: 168,
+      lineNumber: 176,
       columnNumber: 13
     }
   ) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 156,
+    lineNumber: 164,
     columnNumber: 9
   });
 };
@@ -159,7 +167,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 186,
+    lineNumber: 194,
     columnNumber: 29
   }));
 }
