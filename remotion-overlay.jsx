@@ -38,29 +38,56 @@ const RemotionOverlay = () => {
             return;
           }
           const stream = captureFn.call(canvas, 30);
-          recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+          const mimeTypes = [
+            "video/webm;codecs=vp9",
+            "video/webm;codecs=vp8",
+            "video/webm",
+            "video/mp4"
+          ];
+          let mimeType = "video/webm";
+          for (const type of mimeTypes) {
+            if (MediaRecorder.isTypeSupported(type)) {
+              mimeType = type;
+              break;
+            }
+          }
+          console.log("Recording with mimeType:", mimeType);
+          recorder = new MediaRecorder(stream, {
+            mimeType,
+            videoBitsPerSecond: 8e6
+            // 8 Mbps for quality
+          });
           const chunks = [];
           recorder.ondataavailable = (e) => {
-            if (e.data.size > 0) chunks.push(e.data);
+            if (e.data && e.data.size > 0) {
+              chunks.push(e.data);
+            }
           };
           recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: "video/webm" });
+            if (chunks.length === 0) {
+              console.error("Recording failed: No data chunks captured.");
+              window.dispatchEvent(new CustomEvent("render-complete"));
+              return;
+            }
+            const blob = new Blob(chunks, { type: mimeType });
+            console.log(`Recording complete. Size: ${blob.size} bytes`);
             const url = URL.createObjectURL(blob);
+            const ext = mimeType.includes("mp4") ? "mp4" : "webm";
             const a = document.createElement("a");
             a.href = url;
-            a.download = `skydrop-replay-${Date.now()}.webm`;
+            a.download = `skydrop-replay-${Date.now()}.${ext}`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             window.dispatchEvent(new CustomEvent("render-complete"));
           };
-          recorder.start();
+          recorder.start(100);
           recordingTimer = setTimeout(() => {
             if (recorder && recorder.state === "recording") {
               recorder.stop();
             }
-          }, replayData.duration);
+          }, replayData.duration + 200);
         } catch (e) {
           console.error("Recording error", e);
           window.dispatchEvent(new CustomEvent("render-complete"));
@@ -79,13 +106,14 @@ const RemotionOverlay = () => {
   return /* @__PURE__ */ jsxDEV("div", { ref: containerRef, style: {
     position: "absolute",
     top: 0,
-    left: -9999,
-    // Hide off-screen
+    left: 0,
     width: "1280px",
     height: "720px",
     pointerEvents: "none",
-    visibility: "visible"
-    // Must be visible to render
+    visibility: "visible",
+    opacity: 0,
+    // Invisible but rendered on-screen to prevent browser throttling
+    zIndex: -10
   }, children: /* @__PURE__ */ jsxDEV(
     Player,
     {
@@ -104,12 +132,12 @@ const RemotionOverlay = () => {
     false,
     {
       fileName: "<stdin>",
-      lineNumber: 112,
+      lineNumber: 148,
       columnNumber: 13
     }
   ) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 103,
+    lineNumber: 137,
     columnNumber: 9
   });
 };
@@ -117,7 +145,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 130,
+    lineNumber: 166,
     columnNumber: 29
   }));
 }
