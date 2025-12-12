@@ -1,6 +1,7 @@
 // Haptics cache
 this.lastHaptic = { left: 0, right: 0 };
 this.turnSnapCooldown = false;
+this.lastMovementTime = 0;
 
 // Physics helper: Get ejection vector for a point vs box colliders
 getHandCollision(handPos) {

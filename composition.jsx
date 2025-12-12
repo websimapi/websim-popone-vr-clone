@@ -126,6 +126,7 @@ const ReplayComposition = ({ data }) => {
       lHand,
       rHand
     };
+    threeRef.current.renderer.render(threeRef.current.scene, threeRef.current.camera);
     continueRender(handle);
     window.dispatchEvent(new CustomEvent("remotion-ready"));
   }, [canvasRef, handle]);
@@ -183,12 +184,12 @@ const ReplayComposition = ({ data }) => {
     false,
     {
       fileName: "<stdin>",
-      lineNumber: 224,
+      lineNumber: 227,
       columnNumber: 13
     }
   ) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 223,
+    lineNumber: 226,
     columnNumber: 9
   });
 };

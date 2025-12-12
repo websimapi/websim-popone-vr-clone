@@ -382,6 +382,13 @@ export class Dashboard {
 
         console.log(`Exporting Replay: ${framesClean.length} frames, Duration: ${this.replayDuration}ms`);
 
+        // Check for empty data before sending
+        if (framesClean.length === 0) {
+            console.error("No frames recorded!");
+            this.updateBtn(1, "NO DATA", '#cc0000');
+            return;
+        }
+
         const replayData = {
             date: new Date().toISOString(),
             duration: this.replayDuration,
@@ -389,6 +396,10 @@ export class Dashboard {
         };
 
         // Don't end session, just emit
+        // Log size for debugging
+        const payloadSize = JSON.stringify(replayData).length;
+        console.log(`Dispatching render-replay. Payload size: approx ${Math.round(payloadSize/1024)}KB`);
+
         window.dispatchEvent(new CustomEvent('render-replay', { 
             detail: replayData 
         }));
