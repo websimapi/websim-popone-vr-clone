@@ -185,13 +185,14 @@ const RemotionOverlay = () => {
   const durationInFrames = Math.max(1, Math.ceil(replayData.duration / 1e3 * fps));
   return /* @__PURE__ */ jsxDEV("div", { ref: containerRef, style: {
     position: "fixed",
-    top: "-10000px",
-    left: "-10000px",
+    top: 0,
+    left: 0,
+    zIndex: -9999,
     width: "1280px",
     height: "720px",
     pointerEvents: "none",
     visibility: "visible",
-    opacity: 1,
+    opacity: 0.01,
     background: "#000"
   }, children: /* @__PURE__ */ jsxDEV(
     Player,
@@ -211,7 +212,7 @@ const RemotionOverlay = () => {
     false,
     {
       fileName: "<stdin>",
-      lineNumber: 244,
+      lineNumber: 245,
       columnNumber: 13
     }
   ) }, void 0, false, {
@@ -224,7 +225,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 262,
+    lineNumber: 263,
     columnNumber: 29
   }));
 }
