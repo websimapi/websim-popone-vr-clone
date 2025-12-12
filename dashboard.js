@@ -21,6 +21,7 @@ export class Dashboard {
         // Replay System
         this.isReplaying = false;
         this.replayStartTime = 0;
+        this.isDownloadReady = false; // New flag
         this.replayTarget = new THREE.WebGLRenderTarget(512, 288);
         this.replayCamera = new THREE.PerspectiveCamera(70, 16/9, 0.1, 1000);
         this.replayCamera.layers.set(0); // See World
@@ -41,11 +42,9 @@ export class Dashboard {
 
         // Listen for render completion
         window.addEventListener('render-complete', () => {
+            this.isDownloadReady = true;
             if (this.buttons[1]) {
-                this.updateBtn(1, "SAVED", '#00aa00');
-                setTimeout(() => {
-                    this.updateBtn(1, "SAVE", '#444444');
-                }, 3000);
+                this.updateBtn(1, "DOWNLOAD", '#00cc00');
             }
         });
 
@@ -282,7 +281,12 @@ export class Dashboard {
         if (id === 0) {
             this.toggleRecording();
         } else if (id === 1) {
-            this.saveReplay();
+            if (this.isDownloadReady) {
+                // User explicitly requested download retry
+                window.dispatchEvent(new CustomEvent('force-download'));
+            } else {
+                this.saveReplay();
+            }
         } else if (id === 5) {
             this.exitReplay();
         }
@@ -299,6 +303,7 @@ export class Dashboard {
     startRecording() {
         if (this.isRecording) return;
         this.isRecording = true;
+        this.isDownloadReady = false;
         this.frames = [];
         this.recordingStartTime = Date.now();
         this.updateBtn(0, "STOP", '#00cc00');
@@ -314,6 +319,7 @@ export class Dashboard {
         this.replayDuration = Date.now() - this.recordingStartTime;
         this.replayStartTime = Date.now();
         this.isReplaying = true;
+        this.isDownloadReady = false;
 
         this.updateBtn(0, "RECORD", '#cc0000');
         this.updateBtn(1, "SAVE", '#00aa00');
@@ -343,6 +349,7 @@ export class Dashboard {
     exitReplay() {
         this.frames = [];
         this.isReplaying = false;
+        this.isDownloadReady = false;
         this.clearExternalSource();
         // Notify remotion to stop
         window.dispatchEvent(new CustomEvent('close-replay'));

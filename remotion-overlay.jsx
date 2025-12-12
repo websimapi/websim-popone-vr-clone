@@ -5,22 +5,43 @@ import { Player } from "@websim/remotion/player";
 import { ReplayComposition } from "./composition.jsx";
 const RemotionOverlay = () => {
   const [replayData, setReplayData] = useState(null);
+  const [downloadUrl, setDownloadUrl] = useState(null);
   const containerRef = useRef(null);
   useEffect(() => {
     const handleReplay = (e) => {
       console.log("Received replay data", e.detail);
       setReplayData(e.detail);
+      setDownloadUrl(null);
     };
     const handleClose = () => {
       setReplayData(null);
+      setDownloadUrl(null);
+    };
+    const handleForceDownload = () => {
+      if (downloadUrl) {
+        triggerDownload(downloadUrl);
+      }
     };
     window.addEventListener("render-replay", handleReplay);
     window.addEventListener("close-replay", handleClose);
+    window.addEventListener("force-download", handleForceDownload);
     return () => {
       window.removeEventListener("render-replay", handleReplay);
       window.removeEventListener("close-replay", handleClose);
+      window.removeEventListener("force-download", handleForceDownload);
     };
-  }, []);
+  }, [downloadUrl]);
+  const triggerDownload = (url) => {
+    const filename = `skydrop-replay-${Date.now()}.webm`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.target = "_self";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    console.log("Triggered download for", url);
+  };
   useEffect(() => {
     if (!replayData || !containerRef.current) return;
     let recorder = null;
@@ -48,11 +69,10 @@ const RemotionOverlay = () => {
         }
         const stream = captureFn.call(canvas, 30);
         const mimeTypes = [
-          "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
-          "video/mp4",
           "video/webm;codecs=vp9",
           "video/webm;codecs=vp8",
-          "video/webm"
+          "video/webm",
+          "video/mp4"
         ];
         let mimeType = "";
         for (const type of mimeTypes) {
@@ -91,34 +111,10 @@ const RemotionOverlay = () => {
             window.dispatchEvent(new CustomEvent("render-complete"));
             return;
           }
-          const isMp4 = blobType.includes("mp4");
-          const ext = isMp4 ? "mp4" : "webm";
-          const filename = `skydrop-replay-${Date.now()}.${ext}`;
           const url = URL.createObjectURL(blob);
-          console.log("Attempting download", { filename, blobType, size: blob.size });
-          try {
-            const newWin = window.open(url, "_blank");
-            if (!newWin) {
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = filename;
-              a.target = "_blank";
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-            }
-          } catch (err) {
-            console.error("Download via window.open/anchor failed, falling back to location.replace", err);
-            try {
-              window.location.href = url;
-            } catch (err2) {
-              console.error("Final download fallback failed", err2);
-            }
-          }
-          setTimeout(() => {
-            URL.revokeObjectURL(url);
-          }, 1e4);
-          window.dispatchEvent(new CustomEvent("render-complete"));
+          setDownloadUrl(url);
+          triggerDownload(url);
+          window.dispatchEvent(new CustomEvent("render-complete", { detail: { url } }));
         };
         recorder.onerror = (err) => {
           console.error("MediaRecorder error", err);
@@ -135,7 +131,7 @@ const RemotionOverlay = () => {
           }
           window.dispatchEvent(new CustomEvent("render-complete"));
         };
-        recorder.start();
+        recorder.start(200);
         const startTime = performance.now();
         progressTimer = setInterval(() => {
           const elapsed = performance.now() - startTime;
@@ -189,12 +185,12 @@ const RemotionOverlay = () => {
     height: "720px",
     pointerEvents: "none",
     visibility: "visible",
-    opacity: 1,
-    // Must be visible for browser to paint canvas
-    zIndex: -9999,
-    // Behind everything
+    // Must be visible for paint
+    opacity: 0.05,
+    // Almost invisible but painted
+    zIndex: 9999,
+    // On top of everything to avoid occlusion
     background: "#000"
-    // Ensure background exists
   }, children: /* @__PURE__ */ jsxDEV(
     Player,
     {
@@ -213,12 +209,12 @@ const RemotionOverlay = () => {
     false,
     {
       fileName: "<stdin>",
-      lineNumber: 251,
+      lineNumber: 245,
       columnNumber: 13
     }
   ) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 239,
+    lineNumber: 233,
     columnNumber: 9
   });
 };
@@ -226,7 +222,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 269,
+    lineNumber: 263,
     columnNumber: 29
   }));
 }

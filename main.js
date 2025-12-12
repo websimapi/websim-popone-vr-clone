@@ -48,7 +48,8 @@ startBtn.addEventListener('click', async () => {
     if ('xr' in navigator) {
         try {
             const session = await navigator.xr.requestSession('immersive-vr', {
-                optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers']
+                optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers', 'dom-overlay'],
+                domOverlay: { root: document.body }
             });
             renderer.xr.setSession(session);
             
