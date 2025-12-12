@@ -43,8 +43,9 @@ export class Dashboard {
         // Listen for render completion
         window.addEventListener('render-complete', () => {
             this.isDownloadReady = true;
+            // Keep the button as "SAVE" but indicate it's ready by turning it green
             if (this.buttons[1]) {
-                this.updateBtn(1, "DOWNLOAD", '#00cc00');
+                this.updateBtn(1, "SAVE", '#00aa00');
             }
         });
 
