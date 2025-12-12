@@ -50,9 +50,11 @@ const ReplayComposition = ({ data }) => {
       world.createLobby();
       world.createPod();
       continueRender(handle);
+      window.dispatchEvent(new CustomEvent("remotion-ready"));
     }).catch((err) => {
       console.error("Asset load error", err);
       continueRender(handle);
+      window.dispatchEvent(new CustomEvent("remotion-ready"));
     });
     const ghostMat = new THREE.MeshBasicMaterial({ color: 65280, wireframe: true });
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), ghostMat);
@@ -99,11 +101,11 @@ const ReplayComposition = ({ data }) => {
   }, [frame, data, fps]);
   return /* @__PURE__ */ jsxDEV(AbsoluteFill, { children: /* @__PURE__ */ jsxDEV("canvas", { ref: canvasRef, style: { width: "100%", height: "100%" } }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 141,
+    lineNumber: 143,
     columnNumber: 13
   }) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 140,
+    lineNumber: 142,
     columnNumber: 9
   });
 };
