@@ -370,10 +370,22 @@ export class Dashboard {
         // Stop internal replay loop to save performance and switch to external view
         this.isReplaying = false;
 
+        // Ensure clean data structure - deep clone to avoid any proxy/reference issues
+        let framesClean;
+        try {
+            framesClean = JSON.parse(JSON.stringify(this.frames));
+        } catch (e) {
+            console.error("Failed to serialize replay frames", e);
+            this.updateBtn(1, "DATA ERR", '#cc0000');
+            return;
+        }
+
+        console.log(`Exporting Replay: ${framesClean.length} frames, Duration: ${this.replayDuration}ms`);
+
         const replayData = {
             date: new Date().toISOString(),
             duration: this.replayDuration,
-            frames: this.frames
+            frames: framesClean
         };
 
         // Don't end session, just emit

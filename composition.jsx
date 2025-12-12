@@ -131,8 +131,11 @@ const ReplayComposition = ({ data }) => {
   }, [canvasRef, handle]);
   useEffect(() => {
     if (!threeRef.current) return;
-    if (!data || !data.frames || data.frames.length === 0) return;
     const { scene, camera, renderer, head, lHand, rHand } = threeRef.current;
+    if (!data || !data.frames || data.frames.length === 0) {
+      renderer.render(scene, camera);
+      return;
+    }
     const currentTimeMs = frame / fps * 1e3;
     let closestFrame = data.frames[0];
     let minDiff = Math.abs(closestFrame.t - currentTimeMs);
@@ -180,12 +183,12 @@ const ReplayComposition = ({ data }) => {
     false,
     {
       fileName: "<stdin>",
-      lineNumber: 219,
+      lineNumber: 224,
       columnNumber: 13
     }
   ) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 218,
+    lineNumber: 223,
     columnNumber: 9
   });
 };
