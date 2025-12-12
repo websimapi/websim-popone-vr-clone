@@ -50,8 +50,7 @@ const RemotionOverlay = () => {
         const mimeTypes = [
           "video/webm;codecs=vp9",
           "video/webm;codecs=vp8",
-          "video/webm",
-          "video/mp4"
+          "video/webm"
         ];
         let mimeType = "";
         for (const type of mimeTypes) {
@@ -84,17 +83,16 @@ const RemotionOverlay = () => {
           }
           const blobType = mimeType || "video/webm";
           const blob = new Blob(chunks, { type: blobType });
-          console.log(`Recording complete. Size: ${blob.size} bytes`);
+          console.log(`Recording complete. Size: ${blob.size} bytes, type: ${blobType}`);
           if (!blob.size) {
             console.error("Recording failed: Blob size is 0.");
             window.dispatchEvent(new CustomEvent("render-complete"));
             return;
           }
           const url = URL.createObjectURL(blob);
-          const ext = blobType.includes("mp4") ? "mp4" : "webm";
           const a = document.createElement("a");
           a.href = url;
-          a.download = `skydrop-replay-${Date.now()}.${ext}`;
+          a.download = `skydrop-replay-${Date.now()}.webm`;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
