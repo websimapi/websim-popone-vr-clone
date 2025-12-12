@@ -28,7 +28,9 @@ const RemotionOverlay = () => {
     let progressTimer = null;
     let started = false;
     let checkInterval = null;
+    let globalTimeout = null;
     const totalDurationMs = (typeof replayData.duration === "number" ? replayData.duration : 0) + 1500;
+    const maxTotalMs = totalDurationMs + 5e3;
     const isCanvasRendering = (canvas) => {
       try {
         if (canvas.width === 0 || canvas.height === 0) return false;
@@ -150,6 +152,17 @@ const RemotionOverlay = () => {
             window.dispatchEvent(new CustomEvent("render-complete"));
           }
         }, totalDurationMs);
+        globalTimeout = setTimeout(() => {
+          console.warn("Global recording timeout hit, forcing completion.");
+          try {
+            if (recorder && recorder.state === "recording") {
+              recorder.stop();
+            }
+          } catch (e) {
+            console.error("Error forcing recorder stop:", e);
+          }
+          window.dispatchEvent(new CustomEvent("render-complete"));
+        }, maxTotalMs);
       } catch (e) {
         console.error("Recording error", e);
         window.dispatchEvent(new CustomEvent("render-complete"));
@@ -175,8 +188,13 @@ const RemotionOverlay = () => {
       if (checkInterval) clearInterval(checkInterval);
       if (recordingTimer) clearTimeout(recordingTimer);
       if (progressTimer) clearInterval(progressTimer);
+      if (globalTimeout) clearTimeout(globalTimeout);
       if (recorder && recorder.state === "recording") {
-        recorder.stop();
+        try {
+          recorder.stop();
+        } catch (e) {
+          console.error("Error stopping recorder on cleanup:", e);
+        }
       }
     };
   }, [replayData]);
@@ -205,19 +223,19 @@ const RemotionOverlay = () => {
       inputProps: { data: replayData },
       controls: false,
       autoplay: true,
-      loop: true,
+      loop: false,
       style: { width: "100%", height: "100%" }
     },
     void 0,
     false,
     {
       fileName: "<stdin>",
-      lineNumber: 245,
+      lineNumber: 265,
       columnNumber: 13
     }
   ) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 233,
+    lineNumber: 253,
     columnNumber: 9
   });
 };
@@ -225,7 +243,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 263,
+    lineNumber: 283,
     columnNumber: 29
   }));
 }
