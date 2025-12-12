@@ -31,10 +31,17 @@ const RemotionOverlay = () => {
     const totalDurationMs = (typeof replayData.duration === "number" ? replayData.duration : 0) + 1500;
     const isCanvasRendering = (canvas) => {
       try {
+        if (canvas.width === 0 || canvas.height === 0) return false;
         const ctx = canvas.getContext("2d");
-        const imageData = ctx.getImageData(0, 0, 1, 1);
-        return imageData.data[3] > 0;
+        const imageData = ctx.getImageData(0, 0, Math.min(10, canvas.width), Math.min(10, canvas.height));
+        for (let i = 0; i < imageData.data.length; i += 4) {
+          if (imageData.data[i] > 10 || imageData.data[i + 1] > 10 || imageData.data[i + 2] > 10) {
+            return true;
+          }
+        }
+        return false;
       } catch (e) {
+        console.error("Canvas check error:", e);
         return false;
       }
     };
@@ -124,19 +131,23 @@ const RemotionOverlay = () => {
           window.dispatchEvent(new CustomEvent("render-complete"));
         };
         recorder.start(1e3);
-        console.log("MediaRecorder started");
+        console.log("MediaRecorder started, will record for", totalDurationMs, "ms");
         const startTime = performance.now();
         progressTimer = setInterval(() => {
           const elapsed = performance.now() - startTime;
           const progress = totalDurationMs > 0 ? Math.min(1, elapsed / totalDurationMs) : 0;
+          console.log(`Recording progress: ${Math.round(progress * 100)}%`);
           window.dispatchEvent(new CustomEvent("render-progress", {
             detail: { progress }
           }));
         }, 200);
         recordingTimer = setTimeout(() => {
-          console.log("Duration reached, stopping recorder");
+          console.log("Duration reached, stopping recorder. State:", recorder?.state);
           if (recorder && recorder.state === "recording") {
             recorder.stop();
+          } else {
+            console.warn("Recorder not in recording state:", recorder?.state);
+            window.dispatchEvent(new CustomEvent("render-complete"));
           }
         }, totalDurationMs);
       } catch (e) {
@@ -144,9 +155,18 @@ const RemotionOverlay = () => {
         window.dispatchEvent(new CustomEvent("render-complete"));
       }
     };
+    let attempts = 0;
+    const maxAttempts = 100;
     checkInterval = setInterval(() => {
+      attempts++;
       if (started) {
         clearInterval(checkInterval);
+        return;
+      }
+      if (attempts >= maxAttempts) {
+        console.error("Recording timeout: canvas never rendered");
+        clearInterval(checkInterval);
+        window.dispatchEvent(new CustomEvent("render-complete"));
         return;
       }
       startRecording();
@@ -191,12 +211,12 @@ const RemotionOverlay = () => {
     false,
     {
       fileName: "<stdin>",
-      lineNumber: 221,
+      lineNumber: 244,
       columnNumber: 13
     }
   ) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 210,
+    lineNumber: 233,
     columnNumber: 9
   });
 };
@@ -204,7 +224,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 239,
+    lineNumber: 262,
     columnNumber: 29
   }));
 }
