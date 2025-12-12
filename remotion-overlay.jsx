@@ -27,7 +27,7 @@ const RemotionOverlay = () => {
     let recordingTimer = null;
     let progressTimer = null;
     let started = false;
-    const totalDurationMs = (typeof replayData.duration === "number" ? replayData.duration : 0) + 500;
+    const totalDurationMs = (typeof replayData.duration === "number" ? replayData.duration : 0) + 1e3;
     const startRecording = () => {
       if (started) return;
       const canvas = containerRef.current.querySelector("canvas");
@@ -50,7 +50,8 @@ const RemotionOverlay = () => {
         const mimeTypes = [
           "video/webm;codecs=vp9",
           "video/webm;codecs=vp8",
-          "video/webm"
+          "video/webm",
+          "video/mp4"
         ];
         let mimeType = "";
         for (const type of mimeTypes) {
@@ -59,11 +60,13 @@ const RemotionOverlay = () => {
             break;
           }
         }
-        const options = {};
+        const options = {
+          videoBitsPerSecond: 8e6
+        };
         if (mimeType) {
           options.mimeType = mimeType;
         }
-        options.videoBitsPerSecond = 8e6;
+        console.log(`Starting recording with mimeType: ${mimeType || "default"}`);
         recorder = new MediaRecorder(stream, options);
         const chunks = [];
         recorder.ondataavailable = (e) => {
@@ -84,15 +87,14 @@ const RemotionOverlay = () => {
           const blobType = mimeType || "video/webm";
           const blob = new Blob(chunks, { type: blobType });
           console.log(`Recording complete. Size: ${blob.size} bytes, type: ${blobType}`);
-          if (!blob.size) {
-            console.error("Recording failed: Blob size is 0.");
-            window.dispatchEvent(new CustomEvent("render-complete"));
-            return;
+          if (blob.size < 1e3) {
+            console.error("Recording failed: Blob is too small (likely empty).");
           }
           const url = URL.createObjectURL(blob);
+          const ext = blobType.includes("mp4") ? "mp4" : "webm";
           const a = document.createElement("a");
           a.href = url;
-          a.download = `skydrop-replay-${Date.now()}.webm`;
+          a.download = `skydrop-replay-${Date.now()}.${ext}`;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
@@ -107,7 +109,7 @@ const RemotionOverlay = () => {
           }
           window.dispatchEvent(new CustomEvent("render-complete"));
         };
-        recorder.start();
+        recorder.start(100);
         const startTime = performance.now();
         progressTimer = setInterval(() => {
           const elapsed = performance.now() - startTime;
@@ -149,19 +151,19 @@ const RemotionOverlay = () => {
   const fps = 30;
   const durationInFrames = Math.max(1, Math.ceil(replayData.duration / 1e3 * fps));
   return /* @__PURE__ */ jsxDEV("div", { ref: containerRef, style: {
-    position: "absolute",
+    position: "fixed",
     top: 0,
-    left: 0,
+    left: "100vw",
+    // Move completely off-screen but keep it in layout flow
     width: "1280px",
     height: "720px",
-    pointerEvents: "none",
     visibility: "visible",
+    // Must be visible for painting
     opacity: 1,
-    // Must be visible for browser to paint canvas
-    zIndex: -9999,
-    // Behind everything
-    background: "#000"
-    // Ensure background exists
+    zIndex: 99999,
+    // High Z-Index to prevent being covered by other layers (though offscreen)
+    background: "#000",
+    pointerEvents: "none"
   }, children: /* @__PURE__ */ jsxDEV(
     Player,
     {
@@ -180,12 +182,12 @@ const RemotionOverlay = () => {
     false,
     {
       fileName: "<stdin>",
-      lineNumber: 209,
+      lineNumber: 210,
       columnNumber: 13
     }
   ) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 197,
+    lineNumber: 198,
     columnNumber: 9
   });
 };
@@ -193,7 +195,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 227,
+    lineNumber: 228,
     columnNumber: 29
   }));
 }

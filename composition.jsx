@@ -19,113 +19,124 @@ const ReplayComposition = ({ data }) => {
     if (threeRef.current) return;
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(5592405, 2e-3);
-    scene.background = new THREE.Color(328965);
-    const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.1, 1e3);
-    const renderer = new THREE.WebGLRenderer({
-      canvas: canvasRef.current,
-      antialias: true,
-      preserveDrawingBuffer: true
-    });
-    renderer.setSize(1280, 720);
-    renderer.shadowMap.enabled = true;
-    const ambientLight = new THREE.AmbientLight(4210752, 2);
-    scene.add(ambientLight);
-    const dirLight = new THREE.DirectionalLight(16777215, 2);
-    dirLight.position.set(100, 500, 100);
-    dirLight.castShadow = true;
-    dirLight.shadow.camera.top = 200;
-    dirLight.shadow.camera.bottom = -200;
-    dirLight.shadow.camera.left = -200;
-    dirLight.shadow.camera.right = 200;
-    scene.add(dirLight);
-    const towerGeo = new THREE.BoxGeometry(40, 300, 40);
-    const towerMat = new THREE.MeshStandardMaterial({
-      color: 6710886,
-      roughness: 0.8
-    });
-    const tower = new THREE.Mesh(towerGeo, towerMat);
-    tower.position.set(0, 150, 0);
-    tower.castShadow = true;
-    tower.receiveShadow = true;
-    scene.add(tower);
-    const roofGeo = new THREE.BoxGeometry(42, 1, 42);
-    const roofMat = new THREE.MeshStandardMaterial({
-      color: 3355443,
-      metalness: 0.3,
-      roughness: 0.6
-    });
-    const roof = new THREE.Mesh(roofGeo, roofMat);
-    roof.position.set(0, 300.5, 0);
-    roof.castShadow = true;
-    roof.receiveShadow = true;
-    scene.add(roof);
-    const rnd = /* @__PURE__ */ (() => {
-      let seed = 5678;
-      return () => {
-        seed = (Math.floor(seed) * 9301 + 49297) % 233280;
-        return seed / 233280;
-      };
-    })();
-    for (let i = 0; i < 20; i++) {
-      const h = 50 + rnd() * 200;
-      const w = 20 + rnd() * 30;
-      const x = (rnd() - 0.5) * 500;
-      const z = (rnd() - 0.5) * 500;
-      if (Math.abs(x) < 50 && Math.abs(z) < 50) continue;
-      const b = new THREE.Mesh(
-        new THREE.BoxGeometry(w, h, w),
-        new THREE.MeshStandardMaterial({ color: 2236962 })
+    const textureLoader = new THREE.TextureLoader();
+    Promise.all([
+      new Promise((resolve) => textureLoader.load("/concrete.png", resolve, void 0, () => resolve(null))),
+      new Promise((resolve) => textureLoader.load("/skybox.png", resolve, void 0, () => resolve(null)))
+    ]).then(([concreteTex, skyboxTex]) => {
+      if (skyboxTex) {
+        skyboxTex.mapping = THREE.EquirectangularReflectionMapping;
+        scene.background = skyboxTex;
+        scene.environment = skyboxTex;
+      } else {
+        scene.background = new THREE.Color(2236962);
+      }
+      const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.1, 1e3);
+      const renderer = new THREE.WebGLRenderer({
+        canvas: canvasRef.current,
+        antialias: true,
+        preserveDrawingBuffer: true
+      });
+      renderer.setSize(1280, 720);
+      renderer.shadowMap.enabled = true;
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      const ambientLight = new THREE.AmbientLight(4210752, 2);
+      scene.add(ambientLight);
+      const dirLight = new THREE.DirectionalLight(16777215, 2);
+      dirLight.position.set(100, 500, 100);
+      dirLight.castShadow = true;
+      dirLight.shadow.camera.top = 200;
+      dirLight.shadow.camera.bottom = -200;
+      dirLight.shadow.camera.left = -200;
+      dirLight.shadow.camera.right = 200;
+      scene.add(dirLight);
+      const towerGeo = new THREE.BoxGeometry(40, 300, 40);
+      const uvAttribute = towerGeo.attributes.uv;
+      for (let i = 0; i < uvAttribute.count; i++) {
+        uvAttribute.setXY(i, uvAttribute.getX(i) * 4, uvAttribute.getY(i) * 30);
+      }
+      let towerMat;
+      if (concreteTex) {
+        concreteTex.wrapS = concreteTex.wrapT = THREE.RepeatWrapping;
+        concreteTex.colorSpace = THREE.SRGBColorSpace;
+        towerMat = new THREE.MeshStandardMaterial({
+          map: concreteTex,
+          roughness: 0.8
+        });
+      } else {
+        towerMat = new THREE.MeshStandardMaterial({
+          color: 6710886,
+          roughness: 0.8
+        });
+      }
+      const tower = new THREE.Mesh(towerGeo, towerMat);
+      tower.position.set(0, 150, 0);
+      tower.castShadow = true;
+      tower.receiveShadow = true;
+      scene.add(tower);
+      const roofGeo = new THREE.BoxGeometry(42, 1, 42);
+      const roofMat = new THREE.MeshStandardMaterial({
+        color: 3355443,
+        metalness: 0.3,
+        roughness: 0.6
+      });
+      const roof = new THREE.Mesh(roofGeo, roofMat);
+      roof.position.set(0, 300.5, 0);
+      roof.castShadow = true;
+      roof.receiveShadow = true;
+      scene.add(roof);
+      const rnd = /* @__PURE__ */ (() => {
+        let seed = 5678;
+        return () => {
+          seed = (Math.floor(seed) * 9301 + 49297) % 233280;
+          return seed / 233280;
+        };
+      })();
+      for (let i = 0; i < 20; i++) {
+        const h = 50 + rnd() * 200;
+        const w = 20 + rnd() * 30;
+        const x = (rnd() - 0.5) * 500;
+        const z = (rnd() - 0.5) * 500;
+        if (Math.abs(x) < 50 && Math.abs(z) < 50) continue;
+        const b = new THREE.Mesh(
+          new THREE.BoxGeometry(w, h, w),
+          new THREE.MeshStandardMaterial({ color: 2236962 })
+        );
+        b.position.set(x, h / 2, z);
+        b.castShadow = true;
+        b.receiveShadow = true;
+        scene.add(b);
+      }
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(1e3, 1e3),
+        new THREE.MeshStandardMaterial({ color: 1052688 })
       );
-      b.position.set(x, h / 2, z);
-      b.castShadow = true;
-      b.receiveShadow = true;
-      scene.add(b);
-    }
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(1e3, 1e3),
-      new THREE.MeshStandardMaterial({ color: 1052688 })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    scene.add(ground);
-    const podFloor = new THREE.Mesh(
-      new THREE.CylinderGeometry(5, 5, 0.5, 16),
-      new THREE.MeshStandardMaterial({
-        color: 43775,
-        emissive: 8772
-      })
-    );
-    podFloor.position.set(0, 305, -10);
-    podFloor.castShadow = true;
-    podFloor.receiveShadow = true;
-    scene.add(podFloor);
-    const ghostMat = new THREE.MeshBasicMaterial({
-      color: 65280,
-      wireframe: true
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+      const ghostGroup = new THREE.Group();
+      scene.add(ghostGroup);
+      const headGeo = new THREE.BoxGeometry(0.25, 0.25, 0.25);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 16750848 });
+      const head = new THREE.Mesh(headGeo, bodyMat);
+      ghostGroup.add(head);
+      const handGeo = new THREE.BoxGeometry(0.08, 0.08, 0.15);
+      const handMat = new THREE.MeshStandardMaterial({ color: 8947848 });
+      const lHand = new THREE.Mesh(handGeo, handMat);
+      ghostGroup.add(lHand);
+      const rHand = new THREE.Mesh(handGeo, handMat);
+      ghostGroup.add(rHand);
+      threeRef.current = {
+        scene,
+        camera,
+        renderer,
+        head,
+        lHand,
+        rHand
+      };
+      continueRender(handle);
+      window.dispatchEvent(new CustomEvent("remotion-ready"));
     });
-    const head = new THREE.Mesh(
-      new THREE.BoxGeometry(0.25, 0.25, 0.25),
-      ghostMat
-    );
-    const lHand = new THREE.Mesh(
-      new THREE.BoxGeometry(0.08, 0.08, 0.15),
-      ghostMat
-    );
-    const rHand = new THREE.Mesh(
-      new THREE.BoxGeometry(0.08, 0.08, 0.15),
-      ghostMat
-    );
-    scene.add(head, lHand, rHand);
-    threeRef.current = {
-      scene,
-      camera,
-      renderer,
-      head,
-      lHand,
-      rHand
-    };
-    continueRender(handle);
-    window.dispatchEvent(new CustomEvent("remotion-ready"));
   }, [canvasRef, handle]);
   useEffect(() => {
     if (!threeRef.current) return;
@@ -178,12 +189,12 @@ const ReplayComposition = ({ data }) => {
     false,
     {
       fileName: "<stdin>",
-      lineNumber: 218,
+      lineNumber: 241,
       columnNumber: 13
     }
   ) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 217,
+    lineNumber: 240,
     columnNumber: 9
   });
 };
