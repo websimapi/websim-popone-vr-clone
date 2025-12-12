@@ -146,14 +146,6 @@ const ReplayComposition = ({ data }) => {
     }
     continueRender(handle);
     window.dispatchEvent(new CustomEvent("remotion-ready"));
-    return () => {
-      if (threeRef.current) {
-        console.log("ReplayComposition: Cleaning up Three.js scene");
-        const { renderer: renderer2 } = threeRef.current;
-        renderer2.dispose();
-        threeRef.current = null;
-      }
-    };
   }, [canvasRef, handle]);
   useEffect(() => {
     if (!threeRef.current) {
@@ -210,25 +202,24 @@ const ReplayComposition = ({ data }) => {
       "canvas",
       {
         ref: canvasRef,
-        "data-replay-canvas": "1",
         style: { width: "100%", height: "100%" }
       },
       void 0,
       false,
       {
         fileName: "<stdin>",
-        lineNumber: 264,
+        lineNumber: 255,
         columnNumber: 13
       }
     ),
     !data && /* @__PURE__ */ jsxDEV("div", { style: { position: "absolute", top: 10, left: 10, color: "red" }, children: "NO DATA" }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 269,
+      lineNumber: 259,
       columnNumber: 23
     })
   ] }, void 0, true, {
     fileName: "<stdin>",
-    lineNumber: 263,
+    lineNumber: 254,
     columnNumber: 9
   });
 };
