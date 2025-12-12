@@ -41,11 +41,11 @@ export class Dashboard {
         this.replayGroup.add(this.ghostHead, this.ghostL, this.ghostR);
 
         // Listen for render completion
-        window.addEventListener('render-complete', () => {
+        window.addEventListener('render-complete', (e) => {
             this.isDownloadReady = true;
-            // Keep the button as "SAVE" but indicate it's ready by turning it green
+            const success = e.detail && e.detail.success;
             if (this.buttons[1]) {
-                this.updateBtn(1, "SAVE", '#00aa00');
+                this.updateBtn(1, success ? "DONE" : "ERROR", success ? '#00aa00' : '#cc0000');
             }
         });
 
@@ -283,8 +283,12 @@ export class Dashboard {
             this.toggleRecording();
         } else if (id === 1) {
             if (this.isDownloadReady) {
-                // User explicitly requested download retry
-                window.dispatchEvent(new CustomEvent('force-download'));
+                // Already rendered, user wants to download again?
+                // Just trigger the overlay again by re-emitting? 
+                // Or maybe just do nothing as the overlay handles it now.
+                // We can re-emit render-replay if we kept the data, but for now
+                // let's assume the overlay is still there waiting.
+                console.log("Download already ready, check overlay.");
             } else {
                 this.saveReplay();
             }

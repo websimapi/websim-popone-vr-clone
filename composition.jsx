@@ -24,7 +24,9 @@ const ReplayComposition = ({ data }) => {
     const renderer = new THREE.WebGLRenderer({
       canvas: canvasRef.current,
       antialias: true,
-      preserveDrawingBuffer: true
+      preserveDrawingBuffer: true,
+      alpha: false
+      // Ensure solid background
     });
     renderer.setSize(1280, 720);
     renderer.shadowMap.enabled = true;
@@ -178,12 +180,12 @@ const ReplayComposition = ({ data }) => {
     false,
     {
       fileName: "<stdin>",
-      lineNumber: 218,
+      lineNumber: 219,
       columnNumber: 13
     }
   ) }, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 217,
+    lineNumber: 218,
     columnNumber: 9
   });
 };

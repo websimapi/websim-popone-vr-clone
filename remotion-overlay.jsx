@@ -53,6 +53,8 @@ const RemotionOverlay = () => {
       window.removeEventListener("force-download", handleForceDownload);
     };
   }, []);
+  const [rendering, setRendering] = useState(false);
+  const [progress, setProgress] = useState(0);
   useEffect(() => {
     if (!replayData || !containerRef.current) return;
     let recorder = null;
@@ -67,93 +69,82 @@ const RemotionOverlay = () => {
         return;
       }
       started = true;
-      if (window.player && window.player.dashboard) {
-        window.player.dashboard.setExternalSource(canvas);
-      }
-      try {
-        const captureFn = canvas.captureStream || canvas.mozCaptureStream;
-        if (!captureFn) {
-          console.warn("Canvas capture not supported");
-          window.dispatchEvent(new CustomEvent("render-complete"));
-          return;
-        }
-        const stream = captureFn.call(canvas, 30);
-        let selectedType = "video/webm;codecs=vp8";
-        if (!MediaRecorder.isTypeSupported(selectedType)) {
-          selectedType = "video/webm";
-        }
-        const options = {
-          mimeType: selectedType,
-          videoBitsPerSecond: 8e6
-        };
-        recorder = new MediaRecorder(stream, options);
-        const chunks = [];
-        recorder.ondataavailable = (e) => {
-          if (e.data && e.data.size > 0) {
-            chunks.push(e.data);
-          }
-        };
-        recorder.onstop = () => {
-          if (progressTimer) {
-            clearInterval(progressTimer);
-            progressTimer = null;
-          }
-          if (!chunks.length) {
-            console.error(
-              "Recording failed: No data chunks captured."
-            );
-            window.dispatchEvent(
-              new CustomEvent("render-complete")
-            );
+      setRendering(true);
+      setTimeout(() => {
+        try {
+          const captureFn = canvas.captureStream || canvas.mozCaptureStream;
+          if (!captureFn) {
+            console.warn("Canvas capture not supported");
+            setRendering(false);
             return;
           }
-          const blob = new Blob(chunks, { type: "video/webm" });
-          console.log(
-            `Recording complete. Size: ${blob.size} bytes, type: ${blob.type}`
-          );
-          if (!blob.size) {
-            console.error("Recording failed: Blob size is 0.");
-            window.dispatchEvent(
-              new CustomEvent("render-complete")
-            );
-            return;
+          const stream = captureFn.call(canvas, 30);
+          let selectedType = "video/webm;codecs=vp8";
+          if (!MediaRecorder.isTypeSupported(selectedType)) {
+            selectedType = "video/webm";
           }
-          const url = URL.createObjectURL(blob);
-          setDownloadUrl(url);
-          triggerDownload(url);
-          window.dispatchEvent(
-            new CustomEvent("render-complete", { detail: { url } })
-          );
-        };
-        recorder.onerror = (err) => {
-          console.error("MediaRecorder error", err);
-          if (progressTimer) {
-            clearInterval(progressTimer);
-            progressTimer = null;
-          }
-          window.dispatchEvent(new CustomEvent("render-complete"));
-        };
-        recorder.start(100);
-        const startTime = performance.now();
-        progressTimer = setInterval(() => {
-          const elapsed = performance.now() - startTime;
-          const progress = totalDurationMs > 0 ? Math.min(1, elapsed / totalDurationMs) : 0;
-          window.dispatchEvent(new CustomEvent("render-progress", {
-            detail: { progress }
-          }));
-        }, 200);
-        recordingTimer = setTimeout(() => {
-          if (recorder && recorder.state === "recording") {
-            recorder.stop();
-          }
-        }, totalDurationMs);
-      } catch (e) {
-        console.error("Recording error", e);
-        window.dispatchEvent(new CustomEvent("render-complete"));
-      }
+          const options = {
+            mimeType: selectedType,
+            videoBitsPerSecond: 8e6
+          };
+          recorder = new MediaRecorder(stream, options);
+          const chunks = [];
+          recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) {
+              chunks.push(e.data);
+            }
+          };
+          recorder.onstop = () => {
+            setRendering(false);
+            if (progressTimer) {
+              clearInterval(progressTimer);
+              progressTimer = null;
+            }
+            if (!chunks.length) {
+              console.error("Recording failed: No data chunks captured.");
+              window.dispatchEvent(new CustomEvent("render-complete", { detail: { success: false } }));
+              return;
+            }
+            const blob = new Blob(chunks, { type: "video/webm" });
+            console.log(`Recording complete. Size: ${blob.size} bytes`);
+            if (!blob.size) {
+              console.error("Recording failed: Blob size is 0.");
+              window.dispatchEvent(new CustomEvent("render-complete", { detail: { success: false } }));
+              return;
+            }
+            const url = URL.createObjectURL(blob);
+            setDownloadUrl(url);
+            window.dispatchEvent(new CustomEvent("render-complete", { detail: { url, success: true } }));
+          };
+          recorder.onerror = (err) => {
+            console.error("MediaRecorder error", err);
+            setRendering(false);
+            window.dispatchEvent(new CustomEvent("render-complete", { detail: { success: false } }));
+          };
+          recorder.start(100);
+          const startTime = performance.now();
+          progressTimer = setInterval(() => {
+            const elapsed = performance.now() - startTime;
+            const p = totalDurationMs > 0 ? Math.min(1, elapsed / totalDurationMs) : 0;
+            setProgress(p);
+            window.dispatchEvent(new CustomEvent("render-progress", {
+              detail: { progress: p }
+            }));
+          }, 200);
+          recordingTimer = setTimeout(() => {
+            if (recorder && recorder.state === "recording") {
+              recorder.stop();
+            }
+          }, totalDurationMs);
+        } catch (e) {
+          console.error("Recording error", e);
+          setRendering(false);
+          window.dispatchEvent(new CustomEvent("render-complete", { detail: { success: false } }));
+        }
+      }, 500);
     };
     const handleReady = () => {
-      setTimeout(startRecording, 100);
+      setTimeout(startRecording, 500);
     };
     window.addEventListener("remotion-ready", handleReady);
     const fallbackInterval = setInterval(() => {
@@ -162,7 +153,7 @@ const RemotionOverlay = () => {
         return;
       }
       startRecording();
-    }, 500);
+    }, 1e3);
     return () => {
       window.removeEventListener("remotion-ready", handleReady);
       clearInterval(fallbackInterval);
@@ -178,28 +169,46 @@ const RemotionOverlay = () => {
     position: "absolute",
     top: 0,
     left: 0,
-    width: "1280px",
-    height: "720px",
+    width: "100%",
+    height: "100%",
     pointerEvents: "none",
-    // Allow clicks to pass through except for button
-    visibility: "visible",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
     zIndex: 9999
   }, children: [
-    /* @__PURE__ */ jsxDEV("div", { style: {
+    rendering && /* @__PURE__ */ jsxDEV("div", { style: {
       position: "absolute",
-      top: 0,
-      left: 0,
-      width: "100%",
-      height: "100%",
-      background: "#000",
-      opacity: 0.01,
-      zIndex: -1
-    } }, void 0, false, {
+      top: "20px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      background: "rgba(0,0,0,0.8)",
+      padding: "10px 20px",
+      borderRadius: "8px",
+      color: "#fff",
+      zIndex: 10002,
+      fontSize: "20px",
+      fontWeight: "bold"
+    }, children: [
+      "RENDERING REPLAY: ",
+      Math.round(progress * 100),
+      "%"
+    ] }, void 0, true, {
       fileName: "<stdin>",
-      lineNumber: 244,
-      columnNumber: 13
+      lineNumber: 242,
+      columnNumber: 17
     }),
-    /* @__PURE__ */ jsxDEV(
+    /* @__PURE__ */ jsxDEV("div", { style: {
+      width: "640px",
+      height: "360px",
+      border: "2px solid #333",
+      background: "#000",
+      position: "relative",
+      boxShadow: "0 0 50px rgba(0,0,0,0.8)",
+      zIndex: 1e4
+      // Ensure it is on top so browser paints it
+    }, children: /* @__PURE__ */ jsxDEV(
       Player,
       {
         component: ReplayComposition,
@@ -217,50 +226,106 @@ const RemotionOverlay = () => {
       false,
       {
         fileName: "<stdin>",
-        lineNumber: 249,
-        columnNumber: 13
-      }
-    ),
-    downloadUrl && /* @__PURE__ */ jsxDEV("div", { style: {
-      position: "fixed",
-      bottom: "20%",
-      left: "50%",
-      transform: "translateX(-50%)",
-      pointerEvents: "auto",
-      // Enable interaction
-      zIndex: 1e4
-    }, children: /* @__PURE__ */ jsxDEV(
-      "button",
-      {
-        onClick: () => triggerDownload(downloadUrl),
-        style: {
-          padding: "20px 40px",
-          fontSize: "24px",
-          fontWeight: "bold",
-          color: "white",
-          background: "#00cc00",
-          border: "4px solid white",
-          borderRadius: "10px",
-          cursor: "pointer",
-          boxShadow: "0 0 20px rgba(0,0,0,0.5)"
-        },
-        children: "SAVE VIDEO TO DEVICE"
-      },
-      void 0,
-      false,
-      {
-        fileName: "<stdin>",
-        lineNumber: 272,
-        columnNumber: 21
+        lineNumber: 269,
+        columnNumber: 17
       }
     ) }, void 0, false, {
       fileName: "<stdin>",
-      lineNumber: 264,
+      lineNumber: 260,
+      columnNumber: 13
+    }),
+    downloadUrl && !rendering && /* @__PURE__ */ jsxDEV("div", { style: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: "100%",
+      background: "rgba(0,0,0,0.7)",
+      zIndex: 10003,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      pointerEvents: "auto"
+      // Re-enable pointer events for this overlay
+    }, children: /* @__PURE__ */ jsxDEV("div", { style: {
+      background: "#222",
+      padding: "40px",
+      borderRadius: "20px",
+      textAlign: "center",
+      border: "2px solid #555"
+    }, children: [
+      /* @__PURE__ */ jsxDEV("h2", { style: { color: "white", marginBottom: "30px" }, children: "REPLAY READY" }, void 0, false, {
+        fileName: "<stdin>",
+        lineNumber: 302,
+        columnNumber: 25
+      }),
+      /* @__PURE__ */ jsxDEV(
+        "button",
+        {
+          onClick: () => triggerDownload(downloadUrl),
+          style: {
+            padding: "20px 40px",
+            fontSize: "24px",
+            fontWeight: "bold",
+            color: "white",
+            background: "#00cc00",
+            border: "none",
+            borderRadius: "10px",
+            cursor: "pointer",
+            marginBottom: "20px",
+            width: "100%"
+          },
+          children: "SAVE TO DEVICE"
+        },
+        void 0,
+        false,
+        {
+          fileName: "<stdin>",
+          lineNumber: 303,
+          columnNumber: 25
+        }
+      ),
+      /* @__PURE__ */ jsxDEV("br", {}, void 0, false, {
+        fileName: "<stdin>",
+        lineNumber: 320,
+        columnNumber: 25
+      }),
+      /* @__PURE__ */ jsxDEV(
+        "button",
+        {
+          onClick: () => window.dispatchEvent(new CustomEvent("close-replay")),
+          style: {
+            padding: "15px 30px",
+            fontSize: "18px",
+            color: "#aaa",
+            background: "transparent",
+            border: "2px solid #555",
+            borderRadius: "10px",
+            cursor: "pointer",
+            width: "100%"
+          },
+          children: "CLOSE"
+        },
+        void 0,
+        false,
+        {
+          fileName: "<stdin>",
+          lineNumber: 321,
+          columnNumber: 25
+        }
+      )
+    ] }, void 0, true, {
+      fileName: "<stdin>",
+      lineNumber: 295,
+      columnNumber: 21
+    }) }, void 0, false, {
+      fileName: "<stdin>",
+      lineNumber: 285,
       columnNumber: 17
     })
   ] }, void 0, true, {
     fileName: "<stdin>",
-    lineNumber: 233,
+    lineNumber: 221,
     columnNumber: 9
   });
 };
@@ -268,7 +333,7 @@ const root = document.getElementById("remotion-root");
 if (root) {
   createRoot(root).render(/* @__PURE__ */ jsxDEV(RemotionOverlay, {}, void 0, false, {
     fileName: "<stdin>",
-    lineNumber: 296,
+    lineNumber: 345,
     columnNumber: 29
   }));
 }
