@@ -87,7 +87,7 @@ export class Dashboard {
         const btnGeo = new THREE.BoxGeometry(0.08, 0.04, 0.02);
         const btnMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
 
-        const labels = ["RECORD", "SAVE", "MAP", "SETTINGS", "SOCIAL", "EXIT"];
+        const labels = ["RECORD", "SAVE", "RESPAWN", "SETTINGS", "SOCIAL", "EXIT"];
 
         for (let i = 0; i < 6; i++) {
             const btn = new THREE.Mesh(btnGeo, btnMat.clone());
@@ -235,13 +235,27 @@ export class Dashboard {
             c.object.getWorldPosition(handPos);
 
             this.buttons.forEach(btn => {
-                const btnWorld = new THREE.Vector3();
-                btn.getWorldPosition(btnWorld);
+                // Convert hand position into button-local space so hitbox aligns with the mesh
+                const handLocal = btn.worldToLocal(handPos.clone());
 
-                // Distance check for "Touch" - Tighter hitbox
-                const dist = handPos.distanceTo(btnWorld);
+                // Button geometry is 0.08 x 0.04 x 0.02 (centered), so half-extents:
+                const HALF_W = 0.04;
+                const HALF_H = 0.02;
+                const HALF_D = 0.01;
 
-                if (dist < 0.035) { // Reduced from 0.04 for better precision
+                // Small padding so you don't have to be pixel-perfect
+                const PAD_X = 0.01;
+                const PAD_Y = 0.01;
+                const FRONT_PAD = 0.02; // allow a bit in front of the button face
+
+                const insideX = handLocal.x > -HALF_W - PAD_X && handLocal.x < HALF_W + PAD_X;
+                const insideY = handLocal.y > -HALF_H - PAD_Y && handLocal.y < HALF_H + PAD_Y;
+                // Treat a "press" only when in front of or near the front face of the button
+                const inFront = handLocal.z > HALF_D * 0.2 && handLocal.z < HALF_D + FRONT_PAD;
+
+                const isTouching = insideX && insideY && inFront;
+
+                if (isTouching) {
                     if (!btn.userData.isHovered) {
                         btn.userData.isHovered = true;
                         btn.material.emissive.setHex(0x555555);
@@ -324,6 +338,12 @@ export class Dashboard {
                 console.log("Download already ready, check overlay.");
             } else {
                 this.saveReplay();
+            }
+        } else if (id === 2) {
+            // RESPAWN: send player back to the main spawn area and clear velocity
+            if (window.player) {
+                window.player.userGroup.position.set(0, 305, 0);
+                window.player.velocity.set(0, 0, 0);
             }
         } else if (id === 5) {
             this.exitReplay();
